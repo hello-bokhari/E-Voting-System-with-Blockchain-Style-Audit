@@ -7,13 +7,10 @@
 #include <iomanip>
 using namespace std;
 
-// ==================== PLACEHOLDER: HASH FUNCTIONS ====================
 // TODO: Add hash functions here for blockchain implementation
 // - simpleHash(key, tableSize) for hash table indexing
 // - generateHash(data) for blockchain block hashing
-// ====================================================================
 
-// ==================== VOTER STRUCTURE ====================
 struct Voter {
     string voterID;
     string name;
@@ -23,7 +20,6 @@ struct Voter {
     Voter(string id, string n) : voterID(id), name(n), hasVoted(false), next(nullptr) {}
 };
 
-// ==================== VOTER DATABASE ====================
 class VoterDatabase {
 private:
     Voter* head;
@@ -37,7 +33,7 @@ public:
             Voter* temp = head;
             while (temp != nullptr) {
                 if (temp->voterID == voterID) {
-                    cout << "❌ Voter ID already exists!\n";
+                    cout << "Voter ID already exists!\n";
                     return;
                 }
                 temp = temp->next;
@@ -46,10 +42,10 @@ public:
             Voter* newVoter = new Voter(voterID, name);
             newVoter->next = head;
             head = newVoter;
-            cout << "✅ Voter registered successfully: " << name << " (ID: " << voterID << ")\n";
+            cout << "Voter registered successfully: " << name << " (ID: " << voterID << ")\n";
         } catch (const exception& e) {
             // TODO: Implement proper exception handling
-            cout << "❌ Error registering voter: " << e.what() << "\n";
+            cout << "Error registering voter: " << e.what() << "\n";
         }
     }
     
@@ -77,7 +73,7 @@ public:
     }
     
     void displayAllVoters() {
-        cout << "\n========== REGISTERED VOTERS ==========\n";
+        cout << "\nREGISTERED VOTERS:\n";
         int count = 0;
         Voter* temp = head;
         while (temp != nullptr) {
@@ -89,11 +85,9 @@ public:
         cout << "Total registered voters: " << count << "\n";
     }
     
-    // ==================== PLACEHOLDER: FILE HANDLING ====================
     // TODO: Add file persistence methods
-    // - saveToFile(filename) to save voter data to file
-    // - loadFromFile(filename) to load voter data from file
-    // ====================================================================
+    // - saveToFile(filename)
+    // - loadFromFile(filename)
     
     ~VoterDatabase() {
         Voter* temp = head;
@@ -105,7 +99,6 @@ public:
     }
 };
 
-// ==================== VOTE RECORD STRUCTURE ====================
 struct VoteRecord {
     string voterID;
     string candidate;
@@ -122,7 +115,6 @@ struct VoteRecord {
     }
 };
 
-// ==================== VOTE LEDGER ====================
 class VoteLedger {
 private:
     VoteRecord* head;
@@ -142,17 +134,17 @@ public:
             tail = newRecord;
         }
         recordCount++;
-        cout << "✅ Vote recorded (Record #" << recordCount << ")\n";
+        cout << "Vote recorded (Record #" << recordCount << ")\n";
     }
     
     void displayLedger() {
-        cout << "\n========== VOTE LEDGER ==========\n";
+        cout << "\nVOTE LEDGER:\n";
         VoteRecord* current = head;
         int recordNum = 1;
         
         while (current != nullptr) {
             time_t t = current->timestamp;
-            cout << "\n--- Record #" << recordNum << " ---\n";
+            cout << "\nRecord #" << recordNum << "\n";
             cout << "Voter ID: " << current->voterID << "\n";
             cout << "Candidate: " << current->candidate << "\n";
             cout << "Timestamp: " << ctime(&t);
@@ -167,17 +159,13 @@ public:
         return recordCount;
     }
     
-    // ==================== PLACEHOLDER: BLOCKCHAIN FEATURES ====================
     // TODO: Add blockchain integrity verification
-    // - verifyChain() to check hash integrity
-    // - calculateHash() for each record
-    // =========================================================================
+    // - verifyChain()
+    // - calculateHash()
     
-    // ==================== PLACEHOLDER: FILE PERSISTENCE ====================
     // TODO: Add vote ledger file handling
-    // - saveToFile(filename) to persist vote records
-    // - loadFromFile(filename) to load vote history
-    // =======================================================================
+    // - saveToFile(filename)
+    // - loadFromFile(filename)
     
     ~VoteLedger() {
         VoteRecord* current = head;
@@ -189,7 +177,6 @@ public:
     }
 };
 
-// ==================== CANDIDATE NODE ====================
 struct CandidateNode {
     string name;
     int voteCount;
@@ -199,7 +186,6 @@ struct CandidateNode {
     CandidateNode(string n) : name(n), voteCount(0), left(nullptr), right(nullptr) {}
 };
 
-// ==================== CANDIDATE MANAGEMENT ====================
 class CandidateBST {
 private:
     CandidateNode* root;
@@ -208,7 +194,6 @@ private:
         if (node == nullptr) {
             return new CandidateNode(name);
         }
-        
         if (name < node->name) {
             node->left = insert(node->left, name);
         } else if (name > node->name) {
@@ -221,7 +206,6 @@ private:
         if (node == nullptr || node->name == name) {
             return node;
         }
-        
         if (name < node->name) {
             return search(node->left, name);
         }
@@ -231,7 +215,7 @@ private:
     void inorderTraversal(CandidateNode* node) {
         if (node != nullptr) {
             inorderTraversal(node->left);
-            cout << "🗳️  " << node->name << ": " << node->voteCount << " votes\n";
+            cout << node->name << ": " << node->voteCount << " votes\n";
             inorderTraversal(node->right);
         }
     }
@@ -262,7 +246,7 @@ public:
     
     void addCandidate(string name) {
         root = insert(root, name);
-        cout << "✅ Candidate added: " << name << "\n";
+        cout << "Candidate added: " << name << "\n";
     }
     
     bool addVote(string name) {
@@ -275,29 +259,22 @@ public:
     }
     
     void displayResults() {
-        cout << "\n========== ELECTION RESULTS (Sorted) ==========\n";
+        cout << "\nELECTION RESULTS (Sorted):\n";
         inorderTraversal(root);
-        cout << "===============================================\n";
     }
-    
-    // ==================== VOTE RESULT ANALYSIS ====================
     
     string getWinner() {
         if (root == nullptr) return "No candidates";
-        
         vector<pair<string, int>> allCandidates;
         collectCandidates(root, allCandidates);
-        
         string winner = "";
         int maxVotes = -1;
-        
         for (const auto& candidate : allCandidates) {
             if (candidate.second > maxVotes) {
                 maxVotes = candidate.second;
                 winner = candidate.first;
             }
         }
-        
         return winner;
     }
     
@@ -306,24 +283,19 @@ public:
             cout << "No votes cast yet.\n";
             return;
         }
-        
         vector<pair<string, int>> allCandidates;
         collectCandidates(root, allCandidates);
-        
         int total = getTotalVotes(root);
-        
         if (total == 0) {
             cout << "No votes cast yet.\n";
             return;
         }
-        
-        cout << "\n========== VOTE PERCENTAGES ==========\n";
+        cout << "\nVOTE PERCENTAGES:\n";
         for (const auto& candidate : allCandidates) {
             double percentage = (candidate.second * 100.0) / total;
             cout << candidate.first << ": " << candidate.second << " votes (" 
                  << fixed << setprecision(2) << percentage << "%)\n";
         }
-        cout << "======================================\n";
     }
     
     void generateStatistics() {
@@ -331,21 +303,15 @@ public:
             cout << "No candidates in the system.\n";
             return;
         }
-        
         vector<pair<string, int>> allCandidates;
         collectCandidates(root, allCandidates);
-        
         int total = getTotalVotes(root);
-        
-        cout << "\n========== ELECTION STATISTICS ==========\n";
+        cout << "\nELECTION STATISTICS:\n";
         cout << "Total Votes Cast: " << total << "\n";
         cout << "Number of Candidates: " << allCandidates.size() << "\n";
-        
         if (total > 0) {
             string winner = getWinner();
             cout << "Leading Candidate: " << winner << "\n";
-            
-            // Find winner's votes
             int winnerVotes = 0;
             for (const auto& candidate : allCandidates) {
                 if (candidate.first == winner) {
@@ -353,16 +319,11 @@ public:
                     break;
                 }
             }
-            
             double winnerPercentage = (winnerVotes * 100.0) / total;
             cout << "Leading Candidate Votes: " << winnerVotes << " (" 
                  << fixed << setprecision(2) << winnerPercentage << "%)\n";
-            
-            // Average votes per candidate
             double avgVotes = (double)total / allCandidates.size();
             cout << "Average Votes per Candidate: " << fixed << setprecision(2) << avgVotes << "\n";
-            
-            // Find candidates with zero votes
             int zeroVoteCandidates = 0;
             for (const auto& candidate : allCandidates) {
                 if (candidate.second == 0) {
@@ -371,93 +332,35 @@ public:
             }
             cout << "Candidates with Zero Votes: " << zeroVoteCandidates << "\n";
         }
-        
-        cout << "=========================================\n";
     }
     
     bool exportResults(const string& filename) {
         ofstream file(filename);
         if (!file.is_open()) {
-            cout << "❌ Error: Unable to open file for writing.\n";
+            cout << "Error: Unable to open file for writing.\n";
             return false;
         }
-        
         vector<pair<string, int>> allCandidates;
         collectCandidates(root, allCandidates);
-        
         int total = getTotalVotes(root);
-        
-        // Write header
-        file << "========== ELECTION RESULTS REPORT ==========\n";
+        file << "ELECTION RESULTS REPORT\n";
         file << "Generated: " << time(nullptr) << "\n\n";
-        
-        // Write detailed results
         file << "CANDIDATE VOTES:\n";
-        file << "----------------------------------------\n";
         for (const auto& candidate : allCandidates) {
             double percentage = (total > 0) ? (candidate.second * 100.0) / total : 0;
             file << candidate.first << ": " << candidate.second << " votes (" 
                  << fixed << setprecision(2) << percentage << "%)\n";
         }
-        
         file << "\nSTATISTICS:\n";
-        file << "----------------------------------------\n";
         file << "Total Votes: " << total << "\n";
         file << "Total Candidates: " << allCandidates.size() << "\n";
-        
         if (total > 0) {
             string winner = getWinner();
             file << "Winner: " << winner << "\n";
         }
-        
-        file << "============================================\n";
         file.close();
-        
-        cout << "✅ Results exported to " << filename << "\n";
+        cout << "Results exported to " << filename << "\n";
         return true;
-    }
-    
-    void displayDetailedAnalysis() {
-        if (root == nullptr) {
-            cout << "No election data available.\n";
-            return;
-        }
-        
-        vector<pair<string, int>> allCandidates;
-        collectCandidates(root, allCandidates);
-        
-        int total = getTotalVotes(root);
-        
-        cout << "\n╔═══════════════════════════════════════════════╗\n";
-        cout << "║       DETAILED ELECTION ANALYSIS              ║\n";
-        cout << "╚═══════════════════════════════════════════════╝\n\n";
-        
-        // Sort candidates by vote count (descending)
-        for (size_t i = 0; i < allCandidates.size(); i++) {
-            for (size_t j = i + 1; j < allCandidates.size(); j++) {
-                if (allCandidates[j].second > allCandidates[i].second) {
-                    swap(allCandidates[i], allCandidates[j]);
-                }
-            }
-        }
-        
-        cout << "RANKING:\n";
-        cout << "-----------------------------------------------\n";
-        for (size_t i = 0; i < allCandidates.size(); i++) {
-            double percentage = (total > 0) ? (allCandidates[i].second * 100.0) / total : 0;
-            cout << (i + 1) << ". " << allCandidates[i].first 
-                 << ": " << allCandidates[i].second << " votes ("
-                 << fixed << setprecision(2) << percentage << "%)";
-            
-            // Add visual bar
-            int barLength = (total > 0) ? (allCandidates[i].second * 30) / total : 0;
-            cout << " [";
-            for (int j = 0; j < barLength; j++) cout << "█";
-            cout << "]\n";
-        }
-        
-        cout << "\n";
-        generateStatistics();
     }
     
     bool candidateExists(string name) {
@@ -469,7 +372,6 @@ public:
     }
 };
 
-// ==================== MAIN VOTING SYSTEM ====================
 class VotingSystem {
 private:
     VoterDatabase voterDB;
@@ -491,34 +393,26 @@ public:
     void castVote(string voterID, string candidate) {
         // TODO: Add comprehensive exception handling
         try {
-            // Verify voter exists
             Voter* voter = voterDB.findVoter(voterID);
             if (voter == nullptr) {
-                cout << "❌ Voter ID not found! Please register first.\n";
+                cout << "Voter ID not found! Please register first.\n";
                 return;
             }
-            
-            // Check if already voted
             if (voter->hasVoted) {
-                cout << "❌ This voter has already cast their vote!\n";
+                cout << "This voter has already cast their vote!\n";
                 return;
             }
-            
-            // Verify candidate exists
             if (!candidates.candidateExists(candidate)) {
-                cout << "❌ Invalid candidate name!\n";
+                cout << "Invalid candidate name!\n";
                 return;
             }
-            
-            // Record vote
             voterDB.markAsVoted(voterID);
             ledger.addVote(voterID, candidate);
             candidates.addVote(candidate);
-            
-            cout << "🎉 Vote successfully cast for " << candidate << "!\n";
+            cout << "Vote successfully cast for " << candidate << "!\n";
         } catch (const exception& e) {
             // TODO: Implement proper exception handling
-            cout << "❌ Error casting vote: " << e.what() << "\n";
+            cout << "Error casting vote: " << e.what() << "\n";
         }
     }
     
@@ -535,10 +429,6 @@ public:
         voterDB.displayAllVoters();
     }
     
-    void showAnalysis() {
-        candidates.displayDetailedAnalysis();
-    }
-    
     void showPercentages() {
         candidates.getVotePercentages();
     }
@@ -551,34 +441,26 @@ public:
         candidates.exportResults(filename);
     }
     
-    // ==================== PLACEHOLDER: SYSTEM PERSISTENCE ====================
     // TODO: Add system-wide file handling
-    // - saveSystemState(filename) to save all data (voters, votes, candidates)
-    // - loadSystemState(filename) to restore system state
-    // - exportReport(filename) to generate comprehensive election report
-    // =========================================================================
+    // - saveSystemState(filename)
+    // - loadSystemState(filename)
+    // - exportReport(filename)
     
-    // ==================== PLACEHOLDER: BLOCKCHAIN AUDIT ====================
     // TODO: Add blockchain verification
-    // - auditBlockchain() to verify vote integrity
-    // - detectTampering() to identify compromised records
-    // =======================================================================
+    // - auditBlockchain()
+    // - detectTampering()
 };
 
-// ==================== MENU INTERFACE ====================
 void displayMenu() {
-    cout << "\n╔════════════════════════════════════════════╗\n";
-    cout << "║         SIMPLE E-VOTING SYSTEM               ║\n";
-    cout << "╚════════════════════════════════════════════╝\n";
+    cout << "\nSIMPLE E-VOTING SYSTEM\n";
     cout << "1. Register Voter\n";
     cout << "2. Cast Vote\n";
     cout << "3. Display Election Results\n";
     cout << "4. View Vote Ledger\n";
     cout << "5. View Registered Voters\n";
-    cout << "6. Show Detailed Analysis\n";
-    cout << "7. Show Vote Percentages\n";
-    cout << "8. Show Statistics\n";
-    cout << "9. Export Results to File\n";
+    cout << "6. Show Vote Percentages\n";
+    cout << "7. Show Statistics\n";
+    cout << "8. Export Results to File\n";
     cout << "0. Exit\n";
     cout << "Choose an option: ";
 }
@@ -587,15 +469,12 @@ int main() {
     // TODO: Add exception handling for main program
     try {
         VotingSystem system;
-        
-        // Initialize candidates
         cout << "Initializing E-Voting System...\n\n";
         system.initializeCandidates();
         
         // TODO: Add file loading here
         // system.loadSystemState("voting_data.txt");
         
-        // Pre-register some voters for testing
         system.registerVoter("V001", "Abbad");
         system.registerVoter("V002", "Talal");
         system.registerVoter("V003", "Haziq");
@@ -643,18 +522,14 @@ int main() {
                     break;
                     
                 case 6:
-                    system.showAnalysis();
-                    break;
-                    
-                case 7:
                     system.showPercentages();
                     break;
                     
-                case 8:
+                case 7:
                     system.showStatistics();
                     break;
                     
-                case 9:
+                case 8:
                     cout << "Enter filename (e.g., results.txt): ";
                     getline(cin, filename);
                     system.exportElectionResults(filename);
@@ -672,9 +547,8 @@ int main() {
         }
     } catch (const exception& e) {
         // TODO: Implement comprehensive error handling
-        cout << "❌ Critical error: " << e.what() << "\n";
+        cout << "Critical error: " << e.what() << "\n";
         return 1;
     }
-    
     return 0;
 }

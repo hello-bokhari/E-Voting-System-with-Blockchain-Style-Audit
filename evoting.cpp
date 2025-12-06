@@ -5,11 +5,28 @@
 #include <fstream>
 #include <stdexcept>
 #include <iomanip>
+#include <sstream>
 using namespace std;
 
-// TODO: Add hash functions here for blockchain implementation
-// - simpleHash(key, tableSize) for hash table indexing
-// - generateHash(data) for blockchain block hashing
+// Hash function for hash table indexing
+int simpleHash(const string& key, int tableSize) {
+    int hash = 0;
+    for (char c : key) {
+        hash = (hash * 31 + c) % tableSize;
+    }
+    return abs(hash);
+}
+
+// Generate hash for blockchain block hashing
+string generateHash(const string& data) {
+    unsigned long hash = 5381;
+    for (char c : data) {
+        hash = ((hash << 5) + hash) + c;
+    }
+    stringstream ss;
+    ss << hex << hash;
+    return ss.str();
+}
 
 struct Voter {
     string voterID;
@@ -28,8 +45,15 @@ public:
     VoterDatabase() : head(nullptr) {}
     
     void insertVoter(string voterID, string name) {
-        // TODO: Add exception handling for invalid input
         try {
+            // Validate input
+            if (voterID.empty()) {
+                throw invalid_argument("Voter ID cannot be empty");
+            }
+            if (name.empty()) {
+                throw invalid_argument("Name cannot be empty");
+            }
+            
             Voter* temp = head;
             while (temp != nullptr) {
                 if (temp->voterID == voterID) {
@@ -40,11 +64,17 @@ public:
             }
             
             Voter* newVoter = new Voter(voterID, name);
+            if (newVoter == nullptr) {
+                throw runtime_error("Memory allocation failed");
+            }
             newVoter->next = head;
             head = newVoter;
             cout << "Voter registered successfully: " << name << " (ID: " << voterID << ")\n";
+        } catch (const invalid_argument& e) {
+            cout << "Invalid input: " << e.what() << "\n";
+        } catch (const bad_alloc& e) {
+            cout << "Memory allocation error: " << e.what() << "\n";
         } catch (const exception& e) {
-            // TODO: Implement proper exception handling
             cout << "Error registering voter: " << e.what() << "\n";
         }
     }
@@ -85,9 +115,59 @@ public:
         cout << "Total registered voters: " << count << "\n";
     }
     
-    // TODO: Add file persistence methods
-    // - saveToFile(filename)
-    // - loadFromFile(filename)
+    // Save voter database to file
+    bool saveToFile(const string& filename) {
+        try {
+            ofstream file(filename);
+            if (!file.is_open()) {
+                throw runtime_error("Unable to open file for writing");
+            }
+            
+            Voter* temp = head;
+            while (temp != nullptr) {
+                file << temp->voterID << "|" << temp->name << "|" 
+                     << temp->hasVoted << "\n";
+                temp = temp->next;
+            }
+            file.close();
+            return true;
+        } catch (const exception& e) {
+            cout << "Error saving voter database: " << e.what() << "\n";
+            return false;
+        }
+    }
+    
+    // Load voter database from file
+    bool loadFromFile(const string& filename) {
+        try {
+            ifstream file(filename);
+            if (!file.is_open()) {
+                return false; // File doesn't exist, not an error
+            }
+            
+            string line;
+            while (getline(file, line)) {
+                stringstream ss(line);
+                string voterID, name, votedStr;
+                
+                getline(ss, voterID, '|');
+                getline(ss, name, '|');
+                getline(ss, votedStr, '|');
+                
+                if (!voterID.empty() && !name.empty()) {
+                    Voter* newVoter = new Voter(voterID, name);
+                    newVoter->hasVoted = (votedStr == "1");
+                    newVoter->next = head;
+                    head = newVoter;
+                }
+            }
+            file.close();
+            return true;
+        } catch (const exception& e) {
+            cout << "Error loading voter database: " << e.what() << "\n";
+            return false;
+        }
+    }
     
     ~VoterDatabase() {
         Voter* temp = head;
@@ -103,15 +183,20 @@ struct VoteRecord {
     string voterID;
     string candidate;
     time_t timestamp;
+    string hash;
+    string previousHash;
     VoteRecord* next;
     
-    // TODO: Add hash field for blockchain implementation
-    // string hash;
-    // string previousHash;
-    
-    VoteRecord(string vID, string cand) 
-        : voterID(vID), candidate(cand), next(nullptr) {
+    VoteRecord(string vID, string cand, string prevHash = "0") 
+        : voterID(vID), candidate(cand), previousHash(prevHash), next(nullptr) {
         timestamp = time(nullptr);
+        hash = calculateHash();
+    }
+    
+    string calculateHash() {
+        stringstream ss;
+        ss << voterID << candidate << timestamp << previousHash;
+        return generateHash(ss.str());
     }
 };
 
@@ -125,16 +210,25 @@ public:
     VoteLedger() : head(nullptr), tail(nullptr), recordCount(0) {}
     
     void addVote(string voterID, string candidate) {
-        VoteRecord* newRecord = new VoteRecord(voterID, candidate);
-        
-        if (head == nullptr) {
-            head = tail = newRecord;
-        } else {
-            tail->next = newRecord;
-            tail = newRecord;
+        try {
+            string prevHash = (tail != nullptr) ? tail->hash : "0";
+            VoteRecord* newRecord = new VoteRecord(voterID, candidate, prevHash);
+            
+            if (newRecord == nullptr) {
+                throw runtime_error("Memory allocation failed");
+            }
+            
+            if (head == nullptr) {
+                head = tail = newRecord;
+            } else {
+                tail->next = newRecord;
+                tail = newRecord;
+            }
+            recordCount++;
+            cout << "Vote recorded (Record #" << recordCount << ")\n";
+        } catch (const exception& e) {
+            cout << "Error adding vote to ledger: " << e.what() << "\n";
         }
-        recordCount++;
-        cout << "Vote recorded (Record #" << recordCount << ")\n";
     }
     
     void displayLedger() {
@@ -148,6 +242,8 @@ public:
             cout << "Voter ID: " << current->voterID << "\n";
             cout << "Candidate: " << current->candidate << "\n";
             cout << "Timestamp: " << ctime(&t);
+            cout << "Hash: " << current->hash << "\n";
+            cout << "Previous Hash: " << current->previousHash << "\n";
             
             current = current->next;
             recordNum++;
@@ -159,13 +255,97 @@ public:
         return recordCount;
     }
     
-    // TODO: Add blockchain integrity verification
-    // - verifyChain()
-    // - calculateHash()
+    // Verify blockchain integrity
+    bool verifyChain() {
+        if (head == nullptr) {
+            return true;
+        }
+        
+        VoteRecord* current = head;
+        while (current != nullptr) {
+            // Verify current block's hash
+            string calculatedHash = current->calculateHash();
+            if (calculatedHash != current->hash) {
+                cout << "Chain integrity compromised: Hash mismatch in record\n";
+                return false;
+            }
+            
+            // Verify link to previous block
+            if (current->next != nullptr) {
+                if (current->hash != current->next->previousHash) {
+                    cout << "Chain integrity compromised: Previous hash mismatch\n";
+                    return false;
+                }
+            }
+            current = current->next;
+        }
+        cout << "Blockchain verification successful: All records valid\n";
+        return true;
+    }
     
-    // TODO: Add vote ledger file handling
-    // - saveToFile(filename)
-    // - loadFromFile(filename)
+    // Save vote ledger to file
+    bool saveToFile(const string& filename) {
+        try {
+            ofstream file(filename);
+            if (!file.is_open()) {
+                throw runtime_error("Unable to open file for writing");
+            }
+            
+            VoteRecord* current = head;
+            while (current != nullptr) {
+                file << current->voterID << "|" << current->candidate << "|"
+                     << current->timestamp << "|" << current->hash << "|"
+                     << current->previousHash << "\n";
+                current = current->next;
+            }
+            file.close();
+            return true;
+        } catch (const exception& e) {
+            cout << "Error saving vote ledger: " << e.what() << "\n";
+            return false;
+        }
+    }
+    
+    // Load vote ledger from file
+    bool loadFromFile(const string& filename) {
+        try {
+            ifstream file(filename);
+            if (!file.is_open()) {
+                return false; // File doesn't exist
+            }
+            
+            string line;
+            while (getline(file, line)) {
+                stringstream ss(line);
+                string voterID, candidate, timestampStr, hash, previousHash;
+                
+                getline(ss, voterID, '|');
+                getline(ss, candidate, '|');
+                getline(ss, timestampStr, '|');
+                getline(ss, hash, '|');
+                getline(ss, previousHash, '|');
+                
+                if (!voterID.empty() && !candidate.empty()) {
+                    VoteRecord* newRecord = new VoteRecord(voterID, candidate, previousHash);
+                    newRecord->timestamp = stol(timestampStr);
+                    newRecord->hash = hash;
+                    
+                    if (head == nullptr) {
+                        head = tail = newRecord;
+                    } else {
+                        tail->next = newRecord;
+                        tail = newRecord;
+                    }
+                    recordCount++;
+                }
+            }
+            file.close();
+            return true;
+        } catch (const exception& e) {
+            cout << "Error loading vote ledger: " << e.what() << "\n";
+            return false;
+        }
+    }
     
     ~VoteLedger() {
         VoteRecord* current = head;
@@ -238,6 +418,14 @@ private:
             destroyTree(node->left);
             destroyTree(node->right);
             delete node;
+        }
+    }
+    
+    void saveToFileHelper(CandidateNode* node, ofstream& file) {
+        if (node != nullptr) {
+            file << node->name << "|" << node->voteCount << "\n";
+            saveToFileHelper(node->left, file);
+            saveToFileHelper(node->right, file);
         }
     }
     
@@ -335,36 +523,88 @@ public:
     }
     
     bool exportResults(const string& filename) {
-        ofstream file(filename);
-        if (!file.is_open()) {
-            cout << "Error: Unable to open file for writing.\n";
+        try {
+            ofstream file(filename);
+            if (!file.is_open()) {
+                throw runtime_error("Unable to open file for writing");
+            }
+            vector<pair<string, int>> allCandidates;
+            collectCandidates(root, allCandidates);
+            int total = getTotalVotes(root);
+            
+            time_t now = time(nullptr);
+            file << "ELECTION RESULTS REPORT\n";
+            file << "Generated: " << ctime(&now) << "\n";
+            file << "CANDIDATE VOTES:\n";
+            for (const auto& candidate : allCandidates) {
+                double percentage = (total > 0) ? (candidate.second * 100.0) / total : 0;
+                file << candidate.first << ": " << candidate.second << " votes (" 
+                     << fixed << setprecision(2) << percentage << "%)\n";
+            }
+            file << "\nSTATISTICS:\n";
+            file << "Total Votes: " << total << "\n";
+            file << "Total Candidates: " << allCandidates.size() << "\n";
+            if (total > 0) {
+                string winner = getWinner();
+                file << "Winner: " << winner << "\n";
+            }
+            file.close();
+            cout << "Results exported to " << filename << "\n";
+            return true;
+        } catch (const exception& e) {
+            cout << "Error exporting results: " << e.what() << "\n";
             return false;
         }
-        vector<pair<string, int>> allCandidates;
-        collectCandidates(root, allCandidates);
-        int total = getTotalVotes(root);
-        file << "ELECTION RESULTS REPORT\n";
-        file << "Generated: " << time(nullptr) << "\n\n";
-        file << "CANDIDATE VOTES:\n";
-        for (const auto& candidate : allCandidates) {
-            double percentage = (total > 0) ? (candidate.second * 100.0) / total : 0;
-            file << candidate.first << ": " << candidate.second << " votes (" 
-                 << fixed << setprecision(2) << percentage << "%)\n";
-        }
-        file << "\nSTATISTICS:\n";
-        file << "Total Votes: " << total << "\n";
-        file << "Total Candidates: " << allCandidates.size() << "\n";
-        if (total > 0) {
-            string winner = getWinner();
-            file << "Winner: " << winner << "\n";
-        }
-        file.close();
-        cout << "Results exported to " << filename << "\n";
-        return true;
     }
     
     bool candidateExists(string name) {
         return search(root, name) != nullptr;
+    }
+    
+    bool saveToFile(const string& filename) {
+        try {
+            ofstream file(filename);
+            if (!file.is_open()) {
+                throw runtime_error("Unable to open file for writing");
+            }
+            saveToFileHelper(root, file);
+            file.close();
+            return true;
+        } catch (const exception& e) {
+            cout << "Error saving candidates: " << e.what() << "\n";
+            return false;
+        }
+    }
+    
+    bool loadFromFile(const string& filename) {
+        try {
+            ifstream file(filename);
+            if (!file.is_open()) {
+                return false;
+            }
+            
+            string line;
+            while (getline(file, line)) {
+                stringstream ss(line);
+                string name, voteCountStr;
+                
+                getline(ss, name, '|');
+                getline(ss, voteCountStr, '|');
+                
+                if (!name.empty()) {
+                    root = insert(root, name);
+                    CandidateNode* node = search(root, name);
+                    if (node != nullptr) {
+                        node->voteCount = stoi(voteCountStr);
+                    }
+                }
+            }
+            file.close();
+            return true;
+        } catch (const exception& e) {
+            cout << "Error loading candidates: " << e.what() << "\n";
+            return false;
+        }
     }
     
     ~CandidateBST() {
@@ -391,28 +631,42 @@ public:
     }
     
     void castVote(string voterID, string candidate) {
-        // TODO: Add comprehensive exception handling
         try {
+            if (voterID.empty()) {
+                throw invalid_argument("Voter ID cannot be empty");
+            }
+            if (candidate.empty()) {
+                throw invalid_argument("Candidate name cannot be empty");
+            }
+            
             Voter* voter = voterDB.findVoter(voterID);
             if (voter == nullptr) {
-                cout << "Voter ID not found! Please register first.\n";
-                return;
+                throw runtime_error("Voter ID not found! Please register first.");
             }
             if (voter->hasVoted) {
-                cout << "This voter has already cast their vote!\n";
-                return;
+                throw runtime_error("This voter has already cast their vote!");
             }
             if (!candidates.candidateExists(candidate)) {
-                cout << "Invalid candidate name!\n";
-                return;
+                throw invalid_argument("Invalid candidate name!");
             }
-            voterDB.markAsVoted(voterID);
+            
+            if (!voterDB.markAsVoted(voterID)) {
+                throw runtime_error("Failed to mark voter as voted");
+            }
+            
             ledger.addVote(voterID, candidate);
-            candidates.addVote(candidate);
+            
+            if (!candidates.addVote(candidate)) {
+                throw runtime_error("Failed to record vote for candidate");
+            }
+            
             cout << "Vote successfully cast for " << candidate << "!\n";
+        } catch (const invalid_argument& e) {
+            cout << "Invalid input: " << e.what() << "\n";
+        } catch (const runtime_error& e) {
+            cout << "Error: " << e.what() << "\n";
         } catch (const exception& e) {
-            // TODO: Implement proper exception handling
-            cout << "Error casting vote: " << e.what() << "\n";
+            cout << "Unexpected error casting vote: " << e.what() << "\n";
         }
     }
     
@@ -441,113 +695,244 @@ public:
         candidates.exportResults(filename);
     }
     
-    // TODO: Add system-wide file handling
-    // - saveSystemState(filename)
-    // - loadSystemState(filename)
-    // - exportReport(filename)
+    // Save complete system state
+    bool saveSystemState(const string& baseFilename) {
+        try {
+            bool success = true;
+            success &= voterDB.saveToFile(baseFilename + "_voters.txt");
+            success &= ledger.saveToFile(baseFilename + "_ledger.txt");
+            success &= candidates.saveToFile(baseFilename + "_candidates.txt");
+            
+            if (success) {
+                cout << "System state saved successfully\n";
+            } else {
+                cout << "Warning: Some files may not have been saved properly\n";
+            }
+            return success;
+        } catch (const exception& e) {
+            cout << "Error saving system state: " << e.what() << "\n";
+            return false;
+        }
+    }
     
-    // TODO: Add blockchain verification
-    // - auditBlockchain()
-    // - detectTampering()
+    // Load complete system state
+    bool loadSystemState(const string& baseFilename) {
+        try {
+            bool votersLoaded = voterDB.loadFromFile(baseFilename + "_voters.txt");
+            bool ledgerLoaded = ledger.loadFromFile(baseFilename + "_ledger.txt");
+            bool candidatesLoaded = candidates.loadFromFile(baseFilename + "_candidates.txt");
+            
+            if (votersLoaded || ledgerLoaded || candidatesLoaded) {
+                cout << "System state loaded successfully\n";
+                return true;
+            }
+            return false;
+        } catch (const exception& e) {
+            cout << "Error loading system state: " << e.what() << "\n";
+            return false;
+        }
+    }
+    
+    // Generate comprehensive report
+    bool exportReport(const string& filename) {
+        try {
+            ofstream file(filename);
+            if (!file.is_open()) {
+                throw runtime_error("Unable to open file for writing");
+            }
+            
+            time_t now = time(nullptr);
+            file << "====================================\n";
+            file << "COMPREHENSIVE ELECTION REPORT\n";
+            file << "====================================\n";
+            file << "Generated: " << ctime(&now) << "\n";
+            
+            file << "\n--- ELECTION RESULTS ---\n";
+            candidates.exportResults("temp_results.txt");
+            
+            file << "\n--- BLOCKCHAIN STATUS ---\n";
+            if (ledger.verifyChain()) {
+                file << "Blockchain Integrity: VERIFIED\n";
+            } else {
+                file << "Blockchain Integrity: COMPROMISED\n";
+            }
+            file << "Total Records: " << ledger.getTotalVotes() << "\n";
+            
+            file.close();
+            cout << "Comprehensive report exported to " << filename << "\n";
+            return true;
+        } catch (const exception& e) {
+            cout << "Error exporting report: " << e.what() << "\n";
+            return false;
+        }
+    }
+    
+    // Audit blockchain integrity
+    void auditBlockchain() {
+        cout << "\n=== BLOCKCHAIN AUDIT ===\n";
+        if (ledger.verifyChain()) {
+            cout << "Status: SECURE\n";
+            cout << "All vote records are intact and verified.\n";
+        } else {
+            cout << "Status: COMPROMISED\n";
+            cout << "WARNING: Tampering detected in blockchain!\n";
+        }
+    }
+    
+    // Detect tampering
+    void detectTampering() {
+        cout << "\n=== TAMPERING DETECTION ===\n";
+        if (ledger.verifyChain()) {
+            cout << "No tampering detected. System integrity maintained.\n";
+        } else {
+            cout << "ALERT: Potential tampering detected!\n";
+            cout << "Please review the blockchain immediately.\n";
+        }
+    }
 };
 
 void displayMenu() {
-    cout << "\nSIMPLE E-VOTING SYSTEM\n";
-    cout << "1. Register Voter\n";
-    cout << "2. Cast Vote\n";
-    cout << "3. Display Election Results\n";
-    cout << "4. View Vote Ledger\n";
-    cout << "5. View Registered Voters\n";
-    cout << "6. Show Vote Percentages\n";
-    cout << "7. Show Statistics\n";
-    cout << "8. Export Results to File\n";
-    cout << "0. Exit\n";
+    cout << "\n========================================\n";
+    cout << "     SIMPLE E-VOTING SYSTEM\n";
+    cout << "========================================\n";
+    cout << "1.  Register Voter\n";
+    cout << "2.  Cast Vote\n";
+    cout << "3.  Display Election Results\n";
+    cout << "4.  View Vote Ledger\n";
+    cout << "5.  View Registered Voters\n";
+    cout << "6.  Show Vote Percentages\n";
+    cout << "7.  Show Statistics\n";
+    cout << "8.  Export Results to File\n";
+    cout << "9.  Audit Blockchain\n";
+    cout << "10. Detect Tampering\n";
+    cout << "11. Save System State\n";
+    cout << "12. Load System State\n";
+    cout << "0.  Exit\n";
+    cout << "========================================\n";
     cout << "Choose an option: ";
 }
 
 int main() {
-    // TODO: Add exception handling for main program
     try {
         VotingSystem system;
         cout << "Initializing E-Voting System...\n\n";
-        system.initializeCandidates();
         
-        // TODO: Add file loading here
-        // system.loadSystemState("voting_data.txt");
-        
-        system.registerVoter("V001", "Abbad");
-        system.registerVoter("V002", "Talal");
-        system.registerVoter("V003", "Haziq");
+        // Try to load existing data
+        if (!system.loadSystemState("voting_data")) {
+            cout << "No previous data found. Starting fresh.\n";
+            system.initializeCandidates();
+            
+            // Register some default voters
+            system.registerVoter("V001", "Abbad");
+            system.registerVoter("V002", "Talal");
+            system.registerVoter("V003", "Haziq");
+        }
         
         int choice;
         string voterID, name, candidate, filename;
         
         while (true) {
-            displayMenu();
-            cin >> choice;
-            cin.ignore();
-            
-            switch (choice) {
-                case 1:
-                    cout << "Enter Voter ID: ";
-                    getline(cin, voterID);
-                    cout << "Enter Name: ";
-                    getline(cin, name);
-                    system.registerVoter(voterID, name);
-                    break;
-                    
-                case 2:
-                    cout << "Enter Voter ID: ";
-                    getline(cin, voterID);
-                    cout << "Available Candidates:\n";
-                    cout << "  - Akram\n";
-                    cout << "  - Kashan\n";
-                    cout << "  - Mubashir\n";
-                    cout << "  - Suleman\n";
-                    cout << "Enter Candidate Name: ";
-                    getline(cin, candidate);
-                    system.castVote(voterID, candidate);
-                    break;
-                    
-                case 3:
-                    system.displayResults();
-                    break;
-                    
-                case 4:
-                    system.displayLedger();
-                    break;
-                    
-                case 5:
-                    system.displayVoters();
-                    break;
-                    
-                case 6:
-                    system.showPercentages();
-                    break;
-                    
-                case 7:
-                    system.showStatistics();
-                    break;
-                    
-                case 8:
-                    cout << "Enter filename (e.g., results.txt): ";
-                    getline(cin, filename);
-                    system.exportElectionResults(filename);
-                    break;
-                    
-                case 0:
-                    // TODO: Add file saving here before exit
-                    // system.saveSystemState("voting_data.txt");
-                    cout << "Exiting E-Voting System. Thank you!\n";
-                    return 0;
-                    
-                default:
-                    cout << "Invalid choice! Please try again.\n";
+            try {
+                displayMenu();
+                
+                if (!(cin >> choice)) {
+                    cin.clear();
+                    cin.ignore(10000, '\n');
+                    throw invalid_argument("Invalid input! Please enter a number.");
+                }
+                cin.ignore();
+                
+                switch (choice) {
+                    case 1:
+                        cout << "Enter Voter ID: ";
+                        getline(cin, voterID);
+                        cout << "Enter Name: ";
+                        getline(cin, name);
+                        system.registerVoter(voterID, name);
+                        break;
+                        
+                    case 2:
+                        cout << "Enter Voter ID: ";
+                        getline(cin, voterID);
+                        cout << "Available Candidates:\n";
+                        cout << "  - Akram\n";
+                        cout << "  - Kashan\n";
+                        cout << "  - Mubashir\n";
+                        cout << "  - Suleman\n";
+                        cout << "Enter Candidate Name: ";
+                        getline(cin, candidate);
+                        system.castVote(voterID, candidate);
+                        break;
+                        
+                    case 3:
+                        system.displayResults();
+                        break;
+                        
+                    case 4:
+                        system.displayLedger();
+                        break;
+                        
+                    case 5:
+                        system.displayVoters();
+                        break;
+                        
+                    case 6:
+                        system.showPercentages();
+                        break;
+                        
+                    case 7:
+                        system.showStatistics();
+                        break;
+                        
+                    case 8:
+                        cout << "Enter filename (e.g., results.txt): ";
+                        getline(cin, filename);
+                        system.exportElectionResults(filename);
+                        break;
+                        
+                    case 9:
+                        system.auditBlockchain();
+                        break;
+                        
+                    case 10:
+                        system.detectTampering();
+                        break;
+                        
+                    case 11:
+                        system.saveSystemState("voting_data");
+                        break;
+                        
+                    case 12:
+                        if (system.loadSystemState("voting_data")) {
+                            cout << "System state loaded successfully!\n";
+                        } else {
+                            cout << "No saved data found or error loading.\n";
+                        }
+                        break;
+                        
+                    case 0:
+                        cout << "\nSaving system state before exit...\n";
+                        system.saveSystemState("voting_data");
+                        cout << "Exiting E-Voting System. Thank you!\n";
+                        return 0;
+                        
+                    default:
+                        cout << "Invalid choice! Please try again.\n";
+                }
+            } catch (const invalid_argument& e) {
+                cout << "Input error: " << e.what() << "\n";
+            } catch (const runtime_error& e) {
+                cout << "Runtime error: " << e.what() << "\n";
+            } catch (const exception& e) {
+                cout << "Error: " << e.what() << "\n";
             }
         }
     } catch (const exception& e) {
-        // TODO: Implement comprehensive error handling
         cout << "Critical error: " << e.what() << "\n";
+        cout << "The system encountered a fatal error and must exit.\n";
+        return 1;
+    } catch (...) {
+        cout << "Unknown critical error occurred!\n";
         return 1;
     }
     return 0;

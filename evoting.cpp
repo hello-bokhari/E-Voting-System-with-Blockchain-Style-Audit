@@ -135,9 +135,9 @@ public:
     }
     
     void displayAllVoters() {
-        cout << "\n|----------------------------------------|\n";
-        cout << "|       REGISTERED VOTERS LIST           |\n";
-        cout << "|----------------------------------------|\n";
+        cout << "\n╔════════════════════════════════════════╗\n";
+        cout << "║       REGISTERED VOTERS LIST           ║\n";
+        cout << "╚════════════════════════════════════════╝\n";
         
         int count = 0;
         for (int i = 0; i < TABLE_SIZE; i++) {
@@ -150,16 +150,16 @@ public:
                 current = current->next;
             }
         }
-        cout << "-----------------------------------------\n";
+        cout << "─────────────────────────────────────────\n";
         cout << "  Total registered voters: " << count << "\n";
         cout << "  Hash table load factor: " << fixed << setprecision(2) 
              << (double)count / TABLE_SIZE << "\n\n";
     }
     
     void displayHashTableStatistics() {
-        cout << "\n|----------------------------------------|\n";
-        cout << "|     HASH TABLE STATISTICS              |\n";
-        cout << "|----------------------------------------|\n";
+        cout << "\n╔════════════════════════════════════════╗\n";
+        cout << "║     HASH TABLE STATISTICS              ║\n";
+        cout << "╚════════════════════════════════════════╝\n";
         
         int emptySlots = 0;
         int maxChainLength = 0;
@@ -340,21 +340,21 @@ public:
     }
     
     void displayLedger() {
-        cout << "\n|----------------------------------------|\n";
-        cout << "|       BLOCKCHAIN VOTE LEDGER           |\n";
-        cout << "|----------------------------------------|\n";
+        cout << "\n╔════════════════════════════════════════╗\n";
+        cout << "║       BLOCKCHAIN VOTE LEDGER           ║\n";
+        cout << "╚════════════════════════════════════════╝\n";
         
         VoteRecord* current = head;
         int recordNum = 1;
         
         while (current != nullptr) {
-            cout << "\n┌- Block #" << recordNum << " ---------------------\n";
-            cout << "| Voter ID: " << current->voterID << "\n";
-            cout << "| Candidate: " << current->candidate << "\n";
-            cout << "| Timestamp: " << ctime(&current->timestamp);
-            cout << "| Hash: " << current->hash << "\n";
-            cout << "| Previous Hash: " << current->previousHash << "\n";
-            cout << "└--------------------------------------\n";
+            cout << "\n┌─ Block #" << recordNum << " ─────────────────────\n";
+            cout << "│ Voter ID: " << current->voterID << "\n";
+            cout << "│ Candidate: " << current->candidate << "\n";
+            cout << "│ Timestamp: " << ctime(&current->timestamp);
+            cout << "│ Hash: " << current->hash << "\n";
+            cout << "│ Previous Hash: " << current->previousHash << "\n";
+            cout << "└──────────────────────────────────────\n";
             
             current = current->next;
             recordNum++;
@@ -395,9 +395,9 @@ public:
     }
     
     void displayBlockchainHealth() {
-        cout << "\n|----------------------------------------|\n";
-        cout << "|     BLOCKCHAIN HEALTH REPORT           |\n";
-        cout << "|----------------------------------------|\n";
+        cout << "\n╔════════════════════════════════════════╗\n";
+        cout << "║     BLOCKCHAIN HEALTH REPORT           ║\n";
+        cout << "╚════════════════════════════════════════╝\n";
         
         cout << "  Total Blocks: " << recordCount << "\n";
         cout << "  Chain Status: ";
@@ -579,11 +579,11 @@ public:
     }
     
     void displayResults() {
-        cout << "\n|----------------------------------------|\n";
-        cout << "|       ELECTION RESULTS                 |\n";
-        cout << "|----------------------------------------|\n";
+        cout << "\n╔════════════════════════════════════════╗\n";
+        cout << "║       ELECTION RESULTS                 ║\n";
+        cout << "╚════════════════════════════════════════╝\n";
         inorderTraversal(root);
-        cout << "-----------------------------------------\n";
+        cout << "─────────────────────────────────────────\n";
         cout << "  Total votes cast: " << getTotalVotes(root) << "\n\n";
     }
     
@@ -615,9 +615,9 @@ public:
             return;
         }
         
-        cout << "\n|----------------------------------------|\n";
-        cout << "|       VOTE PERCENTAGES                 |\n";
-        cout << "|----------------------------------------|\n";
+        cout << "\n╔════════════════════════════════════════╗\n";
+        cout << "║       VOTE PERCENTAGES                 ║\n";
+        cout << "╚════════════════════════════════════════╝\n";
         
         for (const auto& candidate : allCandidates) {
             double percentage = (candidate.second * 100.0) / total;
@@ -637,9 +637,9 @@ public:
         collectCandidates(root, allCandidates);
         int total = getTotalVotes(root);
         
-        cout << "\n|----------------------------------------|\n";
-        cout << "|       ELECTION STATISTICS              |\n";
-        cout << "|----------------------------------------|\n";
+        cout << "\n╔════════════════════════════════════════╗\n";
+        cout << "║       ELECTION STATISTICS              ║\n";
+        cout << "╚════════════════════════════════════════╝\n";
         cout << "  Total Votes Cast: " << total << "\n";
         cout << "  Number of Candidates: " << allCandidates.size() << "\n";
         
@@ -680,19 +680,19 @@ public:
             int total = getTotalVotes(root);
             
             time_t now = time(nullptr);
-            file << "|----------------------------------------|\n";
-            file << "|    ELECTION RESULTS REPORT             |\n";
-            file << "|----------------------------------------|\n";
+            file << "╔════════════════════════════════════════╗\n";
+            file << "║    ELECTION RESULTS REPORT             ║\n";
+            file << "╚════════════════════════════════════════╝\n";
             file << "Generated: " << ctime(&now) << "\n";
             file << "CANDIDATE VOTES:\n";
-            file << "-----------------------------------------\n";
+            file << "─────────────────────────────────────────\n";
             for (const auto& candidate : allCandidates) {
                 double percentage = (total > 0) ? (candidate.second * 100.0) / total : 0;
                 file << candidate.first << ": " << candidate.second << " votes (" 
                      << fixed << setprecision(2) << percentage << "%)\n";
             }
             file << "\nSTATISTICS:\n";
-            file << "-----------------------------------------\n";
+            file << "─────────────────────────────────────────\n";
             file << "Total Votes: " << total << "\n";
             file << "Total Candidates: " << allCandidates.size() << "\n";
             if (total > 0) {
@@ -772,9 +772,9 @@ private:
     
     void printHeader(const string& title) {
         cout << "\n";
-        cout << "|----------------------------------------|\n";
-        cout << "|  " << setw(38) << left << title << "|\n";
-        cout << "|----------------------------------------|\n";
+        cout << "╔════════════════════════════════════════╗\n";
+        cout << "║  " << setw(38) << left << title << "║\n";
+        cout << "╚════════════════════════════════════════╝\n";
     }
     
 public:
@@ -924,9 +924,9 @@ public:
             }
             
             time_t now = time(nullptr);
-            file << "|----------------------------------------|\n";
-            file << "|  COMPREHENSIVE ELECTION REPORT         |\n";
-            file << "|----------------------------------------|\n";
+            file << "╔════════════════════════════════════════╗\n";
+            file << "║  COMPREHENSIVE ELECTION REPORT         ║\n";
+            file << "╚════════════════════════════════════════╝\n";
             file << "Generated: " << ctime(&now) << "\n";
             
             file << "\n--- SYSTEM STATISTICS ---\n";
@@ -1019,47 +1019,52 @@ public:
 };
 
 void displayBanner() {
-    cout << "\n|------------------------------------------------|\n";
-    cout << "|                                                |\n";
-    cout << "|         SECURE E-VOTING SYSTEM                 |\n";
-    cout << "|                                                |\n";
-    cout << "|   Blockchain-Powered | Hash-Table Auth         |\n";
-    cout << "|   Encrypted Storage | Tamper-Proof             |\n";
-    cout << "|                                                |\n";
-    cout << "|------------------------------------------------|\n";
+    cout << "\n╔════════════════════════════════════════════════╗\n";
+    cout << "║                                                ║\n";
+    cout << "║         SECURE E-VOTING SYSTEM                 ║\n";
+    cout << "║                                                ║\n";
+    cout << "║   Blockchain-Powered | Hash-Table Auth         ║\n";
+    cout << "║   Encrypted Storage | Tamper-Proof             ║\n";
+    cout << "║                                                ║\n";
+    cout << "╚════════════════════════════════════════════════╝\n";
 }
 
 void displayMenu() {
-    cout << "\n|----------------------------------------|\n";
-    cout << "|          MAIN MENU                     |\n";
-    cout << "|----------------------------------------|\n";
-    cout << "| VOTER OPERATIONS:                      |\n";
-    cout << "|  1. Register Voter                     |\n";
-    cout << "|  2. Cast Vote                          |\n";
-    cout << "|  3. Display Election Results           |\n";
-    cout << "|  4. View Registered Voters             |\n";
-    cout << "|  5. Show Vote Percentages              |\n";
-    cout << "|                                        |\n";
-    cout << "| BLOCKCHAIN & SECURITY:                 |\n";
-    cout << "|  6. View Blockchain Ledger             |\n";
-    cout << "|  7. Audit Blockchain                   |\n";
-    cout << "|  8. Detect Tampering                   |\n";
-    cout << "|                                        |\n";
-    cout << "| ADMIN TOOLS:                           |\n";
-    cout << "|  9. Show Statistics                    |\n";
-    cout << "| 10. Hash Table Statistics              |\n";
-    cout << "| 11. Admin Dashboard                    |\n";
-    cout << "| 12. Full System Audit                  |\n";
-    cout << "|                                        |\n";
-    cout << "| FILE OPERATIONS:                       |\n";
-    cout << "| 13. Save System State                  |\n";
-    cout << "| 14. Load System State                  |\n";
-    cout << "| 15. Export Results to File             |\n";
-    cout << "| 16. Export Comprehensive Report        |\n";
-    cout << "|                                        |\n";
-    cout << "|  0. Exit                               |\n";
-    cout << "|----------------------------------------|\n";
+    cout << "\n┌────────────────────────────────────────┐\n";
+    cout << "│          MAIN MENU                     │\n";
+    cout << "├────────────────────────────────────────┤\n";
+    cout << "│ VOTER OPERATIONS:                      │\n";
+    cout << "│  1. Register Voter                     │\n";
+    cout << "│  2. Cast Vote                          │\n";
+    cout << "│  3. Display Election Results           │\n";
+    cout << "│  4. View Registered Voters             │\n";
+    cout << "│  5. Show Vote Percentages              │\n";
+    cout << "│                                        │\n";
+    cout << "│ BLOCKCHAIN & SECURITY:                 │\n";
+    cout << "│  6. View Blockchain Ledger             │\n";
+    cout << "│  7. Audit Blockchain                   │\n";
+    cout << "│  8. Detect Tampering                   │\n";
+    cout << "│                                        │\n";
+    cout << "│ ADMIN TOOLS:                           │\n";
+    cout << "│  9. Show Statistics                    │\n";
+    cout << "│ 10. Hash Table Statistics              │\n";
+    cout << "│ 11. Admin Dashboard                    │\n";
+    cout << "│ 12. Full System Audit                  │\n";
+    cout << "│                                        │\n";
+    cout << "│ FILE OPERATIONS:                       │\n";
+    cout << "│ 13. Save System State                  │\n";
+    cout << "│ 14. Load System State                  │\n";
+    cout << "│ 15. Export Results to File             │\n";
+    cout << "│ 16. Export Comprehensive Report        │\n";
+    cout << "│                                        │\n";
+    cout << "│  0. Exit                               │\n";
+    cout << "└────────────────────────────────────────┘\n";
     cout << "Choose an option: ";
+}
+
+void waitForUser() {
+    cout << "\nPress Enter to return to main menu...";
+    cin.ignore(10000, '\n');
 }
 
 int main() {
@@ -1102,6 +1107,7 @@ int main() {
                         cout << "Enter Name: ";
                         getline(cin, name);
                         system.registerVoter(voterID, name);
+                        waitForUser();
                         break;
                         
                     case 2:
@@ -1116,50 +1122,62 @@ int main() {
                         cout << "\nEnter Candidate Name: ";
                         getline(cin, candidate);
                         system.castVote(voterID, candidate);
+                        waitForUser();
                         break;
                         
                     case 3:
                         system.displayResults();
+                        waitForUser();
                         break;
                         
                     case 4:
                         system.displayVoters();
+                        waitForUser();
                         break;
                         
                     case 5:
                         system.showPercentages();
+                        waitForUser();
                         break;
                         
                     case 6:
                         system.displayLedger();
+                        waitForUser();
                         break;
                         
                     case 7:
                         system.auditBlockchain();
+                        waitForUser();
                         break;
                         
                     case 8:
                         system.detectTampering();
+                        waitForUser();
                         break;
                         
                     case 9:
                         system.showStatistics();
+                        waitForUser();
                         break;
                         
                     case 10:
                         system.showHashTableStats();
+                        waitForUser();
                         break;
                         
                     case 11:
                         system.adminDashboard();
+                        waitForUser();
                         break;
                         
                     case 12:
                         system.fullSystemAudit();
+                        waitForUser();
                         break;
                         
                     case 13:
                         system.saveSystemState("voting_data");
+                        waitForUser();
                         break;
                         
                     case 14:
@@ -1168,18 +1186,21 @@ int main() {
                         } else {
                             cout << "[ERROR] No saved data found or error loading.\n";
                         }
+                        waitForUser();
                         break;
                         
                     case 15:
                         cout << "Enter filename (e.g., results.txt): ";
                         getline(cin, filename);
                         system.exportElectionResults(filename);
+                        waitForUser();
                         break;
                         
                     case 16:
                         cout << "Enter filename (e.g., report.txt): ";
                         getline(cin, filename);
                         system.exportReport(filename);
+                        waitForUser();
                         break;
                         
                     case 0:
@@ -1191,6 +1212,7 @@ int main() {
                         
                     default:
                         cout << "[ERROR] Invalid choice! Please try again.\n";
+                        waitForUser();
                 }
             } catch (const invalid_argument& e) {
                 cout << "[ERROR] Input error: " << e.what() << "\n";

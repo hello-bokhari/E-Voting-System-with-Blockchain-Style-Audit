@@ -135,9 +135,9 @@ public:
     }
     
     void displayAllVoters() {
-        cout << "\n╔----------------------------------------╗\n";
+        cout << "\n|----------------------------------------|\n";
         cout << "|       REGISTERED VOTERS LIST           |\n";
-        cout << "╚----------------------------------------╝\n";
+        cout << "|----------------------------------------|\n";
         
         int count = 0;
         for (int i = 0; i < TABLE_SIZE; i++) {
@@ -157,9 +157,9 @@ public:
     }
     
     void displayHashTableStatistics() {
-        cout << "\n╔----------------------------------------╗\n";
+        cout << "\n|----------------------------------------|\n";
         cout << "|     HASH TABLE STATISTICS              |\n";
-        cout << "╚----------------------------------------╝\n";
+        cout << "|----------------------------------------|\n";
         
         int emptySlots = 0;
         int maxChainLength = 0;
@@ -340,9 +340,9 @@ public:
     }
     
     void displayLedger() {
-        cout << "\n╔----------------------------------------╗\n";
+        cout << "\n|----------------------------------------|\n";
         cout << "|       BLOCKCHAIN VOTE LEDGER           |\n";
-        cout << "╚----------------------------------------╝\n";
+        cout << "|----------------------------------------|\n";
         
         VoteRecord* current = head;
         int recordNum = 1;
@@ -395,9 +395,9 @@ public:
     }
     
     void displayBlockchainHealth() {
-        cout << "\n╔----------------------------------------╗\n";
+        cout << "\n|----------------------------------------|\n";
         cout << "|     BLOCKCHAIN HEALTH REPORT           |\n";
-        cout << "╚----------------------------------------╝\n";
+        cout << "|----------------------------------------|\n";
         
         cout << "  Total Blocks: " << recordCount << "\n";
         cout << "  Chain Status: ";
@@ -579,9 +579,9 @@ public:
     }
     
     void displayResults() {
-        cout << "\n╔----------------------------------------╗\n";
+        cout << "\n|----------------------------------------|\n";
         cout << "|       ELECTION RESULTS                 |\n";
-        cout << "╚----------------------------------------╝\n";
+        cout << "|----------------------------------------|\n";
         inorderTraversal(root);
         cout << "-----------------------------------------\n";
         cout << "  Total votes cast: " << getTotalVotes(root) << "\n\n";
@@ -615,9 +615,9 @@ public:
             return;
         }
         
-        cout << "\n╔----------------------------------------╗\n";
+        cout << "\n|----------------------------------------|\n";
         cout << "|       VOTE PERCENTAGES                 |\n";
-        cout << "╚----------------------------------------╝\n";
+        cout << "|----------------------------------------|\n";
         
         for (const auto& candidate : allCandidates) {
             double percentage = (candidate.second * 100.0) / total;
@@ -637,9 +637,9 @@ public:
         collectCandidates(root, allCandidates);
         int total = getTotalVotes(root);
         
-        cout << "\n╔----------------------------------------╗\n";
+        cout << "\n|----------------------------------------|\n";
         cout << "|       ELECTION STATISTICS              |\n";
-        cout << "╚----------------------------------------╝\n";
+        cout << "|----------------------------------------|\n";
         cout << "  Total Votes Cast: " << total << "\n";
         cout << "  Number of Candidates: " << allCandidates.size() << "\n";
         
@@ -680,9 +680,9 @@ public:
             int total = getTotalVotes(root);
             
             time_t now = time(nullptr);
-            file << "╔----------------------------------------╗\n";
+            file << "|----------------------------------------|\n";
             file << "|    ELECTION RESULTS REPORT             |\n";
-            file << "╚----------------------------------------╝\n";
+            file << "|----------------------------------------|\n";
             file << "Generated: " << ctime(&now) << "\n";
             file << "CANDIDATE VOTES:\n";
             file << "-----------------------------------------\n";
@@ -772,9 +772,9 @@ private:
     
     void printHeader(const string& title) {
         cout << "\n";
-        cout << "╔----------------------------------------╗\n";
+        cout << "|----------------------------------------|\n";
         cout << "|  " << setw(38) << left << title << "|\n";
-        cout << "╚----------------------------------------╝\n";
+        cout << "|----------------------------------------|\n";
     }
     
 public:
@@ -924,9 +924,9 @@ public:
             }
             
             time_t now = time(nullptr);
-            file << "╔----------------------------------------╗\n";
+            file << "|----------------------------------------|\n";
             file << "|  COMPREHENSIVE ELECTION REPORT         |\n";
-            file << "╚----------------------------------------╝\n";
+            file << "|----------------------------------------|\n";
             file << "Generated: " << ctime(&now) << "\n";
             
             file << "\n--- SYSTEM STATISTICS ---\n";

@@ -1,107 +1,189 @@
 #include <iostream>
 #include <string>
 #include <ctime>
-#include <vector>
+#include <cstring>
 #include <fstream>
 #include <stdexcept>
 #include <iomanip>
 #include <sstream>
-#include <algorithm>
+#include <vector>
 using namespace std;
 
-// Hash function for hash table indexing
-int simpleHash(const string& key, int tableSize) {
-    int hash = 0;
+// ==================== UTILITY FUNCTIONS ====================
+
+// Simple but decent hash for hash table
+unsigned int DJB2Hash(const string& key, unsigned int tableSize) {
+    unsigned int hash = 5381;
     for (char c : key) {
-        hash = (hash * 31 + c) % tableSize;
+        hash = ((hash << 5) + hash) + c; // hash * 33 + c
     }
-    return abs(hash) % tableSize;
+    return hash % tableSize;
 }
 
-// Generate hash for blockchain block hashing
-string generateHash(const string& data) {
-    unsigned long hash = 5381;
-    for (char c : data) {
-        hash = ((hash << 5) + hash) + c;
+// SHA-1 inspired hash (simplified for student project)
+string generateSecureHash(const string& data) {
+    unsigned int h0 = 0x67452301;
+    unsigned int h1 = 0xEFCDAB89;
+    unsigned int h2 = 0x98BADCFE;
+    unsigned int h3 = 0x10325476;
+    unsigned int h4 = 0xC3D2E1F0;
+    
+    // Process data in blocks
+    for (size_t i = 0; i < data.length(); i += 4) {
+        unsigned int block = 0;
+        for (int j = 0; j < 4 && (i + j) < data.length(); j++) {
+            block |= (static_cast<unsigned int>(data[i + j]) << (8 * j));
+        }
+        
+        // Mix the block into the hash state
+        h0 = (h0 ^ block) + ((h1 & h2) | (~h1 & h3));
+        h1 = (h1 ^ block) + ((h2 & h3) | (~h2 & h4));
+        h2 = (h2 ^ block) + ((h3 & h4) | (~h3 & h0));
+        h3 = (h3 ^ block) + ((h4 & h0) | (~h4 & h1));
+        h4 = (h4 ^ block) + ((h0 & h1) | (~h0 & h2));
+        
+        // Circular shift
+        h0 = (h0 << 1) | (h0 >> 31);
     }
+    
+    // Combine into final hash
     stringstream ss;
-    ss << hex << hash;
+    ss << hex << h0 << h1 << h2 << h3 << h4;
     return ss.str();
 }
 
-// Simple encryption/decryption using XOR cipher
-string encryptDecrypt(const string& data, const string& key) {
-    string result = data;
-    for (size_t i = 0; i < data.length(); i++) {
-        result[i] = data[i] ^ key[i % key.length()];
+// Simple input validation
+bool isValidVoterID(const string& id) {
+    if (id.length() < 3 || id.length() > 20) return false;
+    for (char c : id) {
+        if (!isalnum(c) && c != '_' && c != '-') return false;
     }
-    return result;
+    return true;
 }
+
+bool isValidName(const string& name) {
+    if (name.length() < 2 || name.length() > 50) return false;
+    for (char c : name) {
+        if (!isalpha(c) && c != ' ' && c != '.' && c != '\'') return false;
+    }
+    return true;
+}
+
+// ==================== VOTER STRUCTURE ====================
 
 struct Voter {
     string voterID;
     string name;
+    string pinHash;  // Hashed PIN for authentication
     bool hasVoted;
     Voter* next;
+    time_t registrationTime;
     
-    Voter(string id, string n) : voterID(id), name(n), hasVoted(false), next(nullptr) {}
+    Voter(string id, string n, string pin) 
+        : voterID(id), name(n), hasVoted(false), next(nullptr) {
+        registrationTime = time(nullptr);
+        // Simple hash of PIN for demo (in real system use bcrypt/scrypt)
+        pinHash = generateSecureHash(pin);
+    }
+    
+    bool verifyPin(const string& pin) const {
+        return pinHash == generateSecureHash(pin);
+    }
 };
+
+// ==================== VOTER HASH TABLE ====================
 
 class VoterHashTable {
 private:
-    static const int TABLE_SIZE = 100;
-    Voter* table[TABLE_SIZE];
+    struct TableSlot {
+        Voter* head;
+        int count;
+        TableSlot() : head(nullptr), count(0) {}
+    };
+    
+    TableSlot* table;
+    int tableSize;
     int totalVoters;
-    string encryptionKey;
+    const double MAX_LOAD_FACTOR = 0.75;
+    
+    void rehash() {
+        int oldSize = tableSize;
+        TableSlot* oldTable = table;
+        
+        tableSize = tableSize * 2 + 1;  // Ensure odd size
+        table = new TableSlot[tableSize];
+        totalVoters = 0;
+        
+        for (int i = 0; i < oldSize; i++) {
+            Voter* current = oldTable[i].head;
+            while (current != nullptr) {
+                Voter* next = current->next;
+                insertVoterDirect(current);
+                current = next;
+            }
+        }
+        
+        delete[] oldTable;
+    }
+    
+    void insertVoterDirect(Voter* voter) {
+        unsigned int index = DJB2Hash(voter->voterID, tableSize);
+        voter->next = table[index].head;
+        table[index].head = voter;
+        table[index].count++;
+        totalVoters++;
+    }
     
 public:
-    VoterHashTable() : totalVoters(0), encryptionKey("VOTING_SECURE_2024") {
-        for (int i = 0; i < TABLE_SIZE; i++) {
-            table[i] = nullptr;
-        }
+    VoterHashTable(int initialSize = 101) : tableSize(initialSize), totalVoters(0) {
+        table = new TableSlot[tableSize];
     }
     
-    void insertVoter(string voterID, string name) {
-        try {
-            if (voterID.empty()) {
-                throw invalid_argument("Voter ID cannot be empty");
-            }
-            if (name.empty()) {
-                throw invalid_argument("Name cannot be empty");
-            }
-            
-            // Check if voter already exists
-            if (findVoter(voterID) != nullptr) {
-                cout << "[ERROR] Voter ID already exists!\n";
-                return;
-            }
-            
-            int index = simpleHash(voterID, TABLE_SIZE);
-            Voter* newVoter = new Voter(voterID, name);
-            
-            if (newVoter == nullptr) {
-                throw runtime_error("Memory allocation failed");
-            }
-            
-            // Insert at the beginning of the chain (collision handling)
-            newVoter->next = table[index];
-            table[index] = newVoter;
-            totalVoters++;
-            
-            cout << "[SUCCESS] Voter registered successfully: " << name << " (ID: " << voterID << ")\n";
-            cout << "          Hash Index: " << index << "\n";
-        } catch (const invalid_argument& e) {
-            cout << "[ERROR] Invalid input: " << e.what() << "\n";
-        } catch (const bad_alloc& e) {
-            cout << "[ERROR] Memory allocation error: " << e.what() << "\n";
-        } catch (const exception& e) {
-            cout << "[ERROR] Error registering voter: " << e.what() << "\n";
-        }
+    ~VoterHashTable() {
+        clear();
+        delete[] table;
     }
     
-    Voter* findVoter(string voterID) {
-        int index = simpleHash(voterID, TABLE_SIZE);
-        Voter* current = table[index];
+    void clear() {
+        for (int i = 0; i < tableSize; i++) {
+            Voter* current = table[i].head;
+            while (current != nullptr) {
+                Voter* next = current->next;
+                delete current;
+                current = next;
+            }
+            table[i].head = nullptr;
+            table[i].count = 0;
+        }
+        totalVoters = 0;
+    }
+    
+    bool registerVoter(const string& voterID, const string& name, const string& pin) {
+        if (!isValidVoterID(voterID) || !isValidName(name) || pin.length() < 4) {
+            return false;
+        }
+        
+        if (findVoter(voterID) != nullptr) {
+            return false;  // Voter already exists
+        }
+        
+        Voter* newVoter = new Voter(voterID, name, pin);
+        
+        // Check load factor
+        double loadFactor = static_cast<double>(totalVoters) / tableSize;
+        if (loadFactor > MAX_LOAD_FACTOR) {
+            rehash();
+        }
+        
+        insertVoterDirect(newVoter);
+        return true;
+    }
+    
+    Voter* findVoter(const string& voterID) const {
+        if (!isValidVoterID(voterID)) return nullptr;
+        
+        unsigned int index = DJB2Hash(voterID, tableSize);
+        Voter* current = table[index].head;
         
         while (current != nullptr) {
             if (current->voterID == voterID) {
@@ -112,159 +194,61 @@ public:
         return nullptr;
     }
     
-    bool authenticateVoter(string voterID) {
+    bool authenticateVoter(const string& voterID, const string& pin) const {
         Voter* voter = findVoter(voterID);
-        if (voter == nullptr) {
-            cout << "[ERROR] Authentication failed: Voter ID not found\n";
-            return false;
-        }
-        cout << "[SUCCESS] Authentication successful: " << voter->name << "\n";
-        return true;
+        return (voter != nullptr && !voter->hasVoted && voter->verifyPin(pin));
     }
     
-    bool markAsVoted(string voterID) {
+    bool castVote(const string& voterID) {
         Voter* voter = findVoter(voterID);
-        if (voter == nullptr) {
-            return false;
-        }
-        if (voter->hasVoted) {
+        if (voter == nullptr || voter->hasVoted) {
             return false;
         }
         voter->hasVoted = true;
         return true;
     }
     
-    void displayAllVoters() {
+    void displayStatistics() const {
         cout << "\n╔════════════════════════════════════════╗\n";
-        cout << "║       REGISTERED VOTERS LIST           ║\n";
-        cout << "╚════════════════════════════════════════╝\n";
-        
-        int count = 0;
-        for (int i = 0; i < TABLE_SIZE; i++) {
-            Voter* current = table[i];
-            while (current != nullptr) {
-                cout << "  ID: " << setw(10) << left << current->voterID 
-                     << " | Name: " << setw(20) << left << current->name 
-                     << " | Voted: " << (current->hasVoted ? "[YES]" : "[NO]") << "\n";
-                count++;
-                current = current->next;
-            }
-        }
-        cout << "─────────────────────────────────────────\n";
-        cout << "  Total registered voters: " << count << "\n";
-        cout << "  Hash table load factor: " << fixed << setprecision(2) 
-             << (double)count / TABLE_SIZE << "\n\n";
-    }
-    
-    void displayHashTableStatistics() {
-        cout << "\n╔════════════════════════════════════════╗\n";
-        cout << "║     HASH TABLE STATISTICS              ║\n";
+        cout << "║     VOTER DATABASE STATISTICS        ║\n";
         cout << "╚════════════════════════════════════════╝\n";
         
         int emptySlots = 0;
-        int maxChainLength = 0;
-        int totalChainLength = 0;
+        int maxChain = 0;
+        int totalChains = 0;
         int usedSlots = 0;
         
-        for (int i = 0; i < TABLE_SIZE; i++) {
-            int chainLength = 0;
-            Voter* current = table[i];
-            
-            if (current == nullptr) {
+        for (int i = 0; i < tableSize; i++) {
+            if (table[i].head == nullptr) {
                 emptySlots++;
             } else {
                 usedSlots++;
-                while (current != nullptr) {
-                    chainLength++;
-                    current = current->next;
+                totalChains += table[i].count;
+                if (table[i].count > maxChain) {
+                    maxChain = table[i].count;
                 }
-                totalChainLength += chainLength;
-                maxChainLength = max(maxChainLength, chainLength);
             }
         }
         
-        cout << "  Table Size: " << TABLE_SIZE << "\n";
+        cout << "  Table Size: " << tableSize << "\n";
         cout << "  Total Voters: " << totalVoters << "\n";
         cout << "  Used Slots: " << usedSlots << "\n";
         cout << "  Empty Slots: " << emptySlots << "\n";
         cout << "  Load Factor: " << fixed << setprecision(2) 
-             << (double)totalVoters / TABLE_SIZE << "\n";
-        cout << "  Max Chain Length: " << maxChainLength << "\n";
+             << (double)totalVoters / tableSize << "\n";
+        cout << "  Max Chain Length: " << maxChain << "\n";
         if (usedSlots > 0) {
             cout << "  Avg Chain Length: " << fixed << setprecision(2) 
-                 << (double)totalChainLength / usedSlots << "\n";
+                 << (double)totalChains / usedSlots << "\n";
         }
-        cout << "  Collision Rate: " << fixed << setprecision(2) 
-             << (double)(totalVoters - usedSlots) / totalVoters * 100 << "%\n\n";
-    }
-    
-    bool saveToFile(const string& filename) {
-        try {
-            ofstream file(filename);
-            if (!file.is_open()) {
-                throw runtime_error("Unable to open file for writing");
-            }
-            
-            for (int i = 0; i < TABLE_SIZE; i++) {
-                Voter* current = table[i];
-                while (current != nullptr) {
-                    string encryptedID = encryptDecrypt(current->voterID, encryptionKey);
-                    string encryptedName = encryptDecrypt(current->name, encryptionKey);
-                    file << encryptedID << "|" << encryptedName << "|" 
-                         << current->hasVoted << "\n";
-                    current = current->next;
-                }
-            }
-            file.close();
-            return true;
-        } catch (const exception& e) {
-            cout << "[ERROR] Error saving voter database: " << e.what() << "\n";
-            return false;
-        }
-    }
-    
-    bool loadFromFile(const string& filename) {
-        try {
-            ifstream file(filename);
-            if (!file.is_open()) {
-                return false;
-            }
-            
-            string line;
-            while (getline(file, line)) {
-                stringstream ss(line);
-                string encryptedID, encryptedName, votedStr;
-                
-                getline(ss, encryptedID, '|');
-                getline(ss, encryptedName, '|');
-                getline(ss, votedStr, '|');
-                
-                if (!encryptedID.empty() && !encryptedName.empty()) {
-                    string voterID = encryptDecrypt(encryptedID, encryptionKey);
-                    string name = encryptDecrypt(encryptedName, encryptionKey);
-                    
-                    int index = simpleHash(voterID, TABLE_SIZE);
-                    Voter* newVoter = new Voter(voterID, name);
-                    newVoter->hasVoted = (votedStr == "1");
-                    newVoter->next = table[index];
-                    table[index] = newVoter;
-                    totalVoters++;
-                }
-            }
-            file.close();
-            return true;
-        } catch (const exception& e) {
-            cout << "[ERROR] Error loading voter database: " << e.what() << "\n";
-            return false;
-        }
+        cout << "\n";
     }
     
     int getTotalVoters() const { return totalVoters; }
-    
     int getVotedCount() const {
         int count = 0;
-        for (int i = 0; i < TABLE_SIZE; i++) {
-            Voter* current = table[i];
+        for (int i = 0; i < tableSize; i++) {
+            Voter* current = table[i].head;
             while (current != nullptr) {
                 if (current->hasVoted) count++;
                 current = current->next;
@@ -272,305 +256,199 @@ public:
         }
         return count;
     }
-    
-    ~VoterHashTable() {
-        for (int i = 0; i < TABLE_SIZE; i++) {
-            Voter* current = table[i];
-            while (current != nullptr) {
-                Voter* toDelete = current;
-                current = current->next;
-                delete toDelete;
-            }
-        }
-    }
 };
 
-struct VoteRecord {
-    string voterID;
-    string candidate;
-    time_t timestamp;
-    string hash;
+// ==================== ANONYMOUS VOTE RECORD ====================
+
+struct VoteBlock {
+    string voteHash;      // Hash of (previousHash + candidate + salt)
     string previousHash;
-    VoteRecord* next;
+    string candidate;
+    string salt;          // Random salt for each vote
+    time_t timestamp;
+    VoteBlock* next;
     
-    VoteRecord(string vID, string cand, string prevHash = "0") 
-        : voterID(vID), candidate(cand), previousHash(prevHash), next(nullptr) {
+    VoteBlock(const string& cand, const string& prevHash) 
+        : candidate(cand), previousHash(prevHash), next(nullptr) {
         timestamp = time(nullptr);
-        hash = calculateHash();
+        salt = generateSecureHash(to_string(rand()) + to_string(timestamp));
+        voteHash = calculateHash();
     }
     
-    string calculateHash() {
-        stringstream ss;
-        ss << voterID << candidate << timestamp << previousHash;
-        return generateHash(ss.str());
+    string calculateHash() const {
+        string data = previousHash + candidate + salt + to_string(timestamp);
+        return generateSecureHash(data);
+    }
+    
+    // Verify this block's integrity
+    bool verify() const {
+        return voteHash == calculateHash();
     }
 };
 
-class VoteLedger {
+class AnonymousVoteChain {
 private:
-    VoteRecord* head;
-    VoteRecord* tail;
-    int recordCount;
-    string encryptionKey;
+    VoteBlock* head;
+    VoteBlock* tail;
+    int blockCount;
+    string genesisHash;
     
 public:
-    VoteLedger() : head(nullptr), tail(nullptr), recordCount(0), 
-                   encryptionKey("BLOCKCHAIN_KEY_2024") {}
-    
-    void addVote(string voterID, string candidate) {
-        try {
-            string prevHash = (tail != nullptr) ? tail->hash : "0";
-            VoteRecord* newRecord = new VoteRecord(voterID, candidate, prevHash);
-            
-            if (newRecord == nullptr) {
-                throw runtime_error("Memory allocation failed");
-            }
-            
-            if (head == nullptr) {
-                head = tail = newRecord;
-            } else {
-                tail->next = newRecord;
-                tail = newRecord;
-            }
-            recordCount++;
-            cout << "[LOG] Vote recorded in blockchain (Block #" << recordCount << ")\n";
-        } catch (const exception& e) {
-            cout << "[ERROR] Error adding vote to ledger: " << e.what() << "\n";
-        }
+    AnonymousVoteChain() : head(nullptr), tail(nullptr), blockCount(0) {
+        genesisHash = generateSecureHash("GENESIS_BLOCK_ELECTION_SYSTEM");
     }
     
-    void displayLedger() {
-        cout << "\n╔════════════════════════════════════════╗\n";
-        cout << "║       BLOCKCHAIN VOTE LEDGER           ║\n";
-        cout << "╚════════════════════════════════════════╝\n";
-        
-        VoteRecord* current = head;
-        int recordNum = 1;
-        
+    ~AnonymousVoteChain() {
+        clear();
+    }
+    
+    void clear() {
+        VoteBlock* current = head;
         while (current != nullptr) {
-            cout << "\n┌─ Block #" << recordNum << " ─────────────────────\n";
-            cout << "│ Voter ID: " << current->voterID << "\n";
-            cout << "│ Candidate: " << current->candidate << "\n";
-            cout << "│ Timestamp: " << ctime(&current->timestamp);
-            cout << "│ Hash: " << current->hash << "\n";
-            cout << "│ Previous Hash: " << current->previousHash << "\n";
-            cout << "└──────────────────────────────────────\n";
-            
-            current = current->next;
-            recordNum++;
+            VoteBlock* next = current->next;
+            delete current;
+            current = next;
         }
-        cout << "\nTotal blocks: " << recordCount << "\n\n";
+        head = tail = nullptr;
+        blockCount = 0;
     }
     
-    int getTotalVotes() const { return recordCount; }
-    
-    bool verifyChain() {
+    // Add vote without voter identification (anonymous)
+    bool addVote(const string& candidate) {
+        string prevHash = (tail != nullptr) ? tail->voteHash : genesisHash;
+        VoteBlock* newBlock = new VoteBlock(candidate, prevHash);
+        
+        if (!newBlock->verify()) {
+            delete newBlock;
+            return false;
+        }
+        
         if (head == nullptr) {
-            return true;
+            head = tail = newBlock;
+        } else {
+            tail->next = newBlock;
+            tail = newBlock;
         }
+        blockCount++;
+        return true;
+    }
+    
+    bool verifyChain() const {
+        if (head == nullptr) return true;
         
-        VoteRecord* current = head;
-        int blockNum = 1;
+        VoteBlock* current = head;
+        string expectedPrevHash = genesisHash;
         
         while (current != nullptr) {
-            string calculatedHash = current->calculateHash();
-            if (calculatedHash != current->hash) {
-                cout << "[ERROR] Block #" << blockNum << ": Hash mismatch!\n";
-                cout << "        Expected: " << current->hash << "\n";
-                cout << "        Calculated: " << calculatedHash << "\n";
+            // Verify block hash
+            if (!current->verify()) {
                 return false;
             }
             
-            if (current->next != nullptr) {
-                if (current->hash != current->next->previousHash) {
-                    cout << "[ERROR] Block #" << blockNum << " -> #" << (blockNum + 1) 
-                         << ": Chain link broken!\n";
-                    return false;
-                }
+            // Verify link to previous block
+            if (current->previousHash != expectedPrevHash) {
+                return false;
             }
+            
+            expectedPrevHash = current->voteHash;
             current = current->next;
-            blockNum++;
         }
         return true;
     }
     
-    void displayBlockchainHealth() {
+    int countVotesForCandidate(const string& candidate) const {
+        int count = 0;
+        VoteBlock* current = head;
+        while (current != nullptr) {
+            if (current->candidate == candidate) {
+                count++;
+            }
+            current = current->next;
+        }
+        return count;
+    }
+    
+    void displayChainHealth() const {
         cout << "\n╔════════════════════════════════════════╗\n";
-        cout << "║     BLOCKCHAIN HEALTH REPORT           ║\n";
+        cout << "║     ANONYMOUS VOTE CHAIN HEALTH       ║\n";
         cout << "╚════════════════════════════════════════╝\n";
         
-        cout << "  Total Blocks: " << recordCount << "\n";
-        cout << "  Chain Status: ";
+        cout << "  Total Votes: " << blockCount << "\n";
+        cout << "  Chain Integrity: ";
         
         if (verifyChain()) {
-            cout << "[VALID] All blocks verified\n";
-            cout << "  Integrity: 100%\n";
-            cout << "  Security Level: HIGH\n";
+            cout << "[VERIFIED]\n";
+            cout << "  Tamper Detection: [ACTIVE]\n";
+            cout << "  Anonymity: [PRESERVED]\n";
         } else {
-            cout << "[INVALID] Tampering detected!\n";
-            cout << "  Integrity: COMPROMISED\n";
-            cout << "  Security Level: CRITICAL\n";
+            cout << "[COMPROMISED]\n";
+            cout << "  Tamper Detection: [ALERT]\n";
+            cout << "  Action Required: Audit needed\n";
         }
         cout << "\n";
     }
     
-    bool saveToFile(const string& filename) {
-        try {
-            ofstream file(filename);
-            if (!file.is_open()) {
-                throw runtime_error("Unable to open file for writing");
-            }
-            
-            VoteRecord* current = head;
-            while (current != nullptr) {
-                string encryptedVoterID = encryptDecrypt(current->voterID, encryptionKey);
-                file << encryptedVoterID << "|" << current->candidate << "|"
-                     << current->timestamp << "|" << current->hash << "|"
-                     << current->previousHash << "\n";
-                current = current->next;
-            }
-            file.close();
-            return true;
-        } catch (const exception& e) {
-            cout << "[ERROR] Error saving vote ledger: " << e.what() << "\n";
-            return false;
-        }
-    }
-    
-    bool loadFromFile(const string& filename) {
-        try {
-            ifstream file(filename);
-            if (!file.is_open()) {
-                return false;
-            }
-            
-            string line;
-            while (getline(file, line)) {
-                stringstream ss(line);
-                string encryptedVoterID, candidate, timestampStr, hash, previousHash;
-                
-                getline(ss, encryptedVoterID, '|');
-                getline(ss, candidate, '|');
-                getline(ss, timestampStr, '|');
-                getline(ss, hash, '|');
-                getline(ss, previousHash, '|');
-                
-                if (!encryptedVoterID.empty() && !candidate.empty()) {
-                    string voterID = encryptDecrypt(encryptedVoterID, encryptionKey);
-                    VoteRecord* newRecord = new VoteRecord(voterID, candidate, previousHash);
-                    newRecord->timestamp = stol(timestampStr);
-                    newRecord->hash = hash;
-                    
-                    if (head == nullptr) {
-                        head = tail = newRecord;
-                    } else {
-                        tail->next = newRecord;
-                        tail = newRecord;
-                    }
-                    recordCount++;
-                }
-            }
-            file.close();
-            return true;
-        } catch (const exception& e) {
-            cout << "[ERROR] Error loading vote ledger: " << e.what() << "\n";
-            return false;
-        }
-    }
-    
-    ~VoteLedger() {
-        VoteRecord* current = head;
-        while (current != nullptr) {
-            VoteRecord* toDelete = current;
-            current = current->next;
-            delete toDelete;
-        }
-    }
+    int getTotalVotes() const { return blockCount; }
 };
 
-struct CandidateNode {
+// ==================== CANDIDATE MANAGER ====================
+
+struct Candidate {
     string name;
     int voteCount;
-    CandidateNode* left;
-    CandidateNode* right;
+    Candidate* next;
     
-    CandidateNode(string n) : name(n), voteCount(0), left(nullptr), right(nullptr) {}
+    Candidate(const string& n) : name(n), voteCount(0), next(nullptr) {}
 };
 
-class CandidateBST {
+class CandidateManager {
 private:
-    CandidateNode* root;
+    Candidate* head;
+    int candidateCount;
     
-    CandidateNode* insert(CandidateNode* node, string name) {
-        if (node == nullptr) {
-            return new CandidateNode(name);
+    Candidate* findCandidate(const string& name) const {
+        Candidate* current = head;
+        while (current != nullptr) {
+            if (current->name == name) {
+                return current;
+            }
+            current = current->next;
         }
-        if (name < node->name) {
-            node->left = insert(node->left, name);
-        } else if (name > node->name) {
-            node->right = insert(node->right, name);
-        }
-        return node;
-    }
-    
-    CandidateNode* search(CandidateNode* node, string name) {
-        if (node == nullptr || node->name == name) {
-            return node;
-        }
-        if (name < node->name) {
-            return search(node->left, name);
-        }
-        return search(node->right, name);
-    }
-    
-    void inorderTraversal(CandidateNode* node) {
-        if (node != nullptr) {
-            inorderTraversal(node->left);
-            cout << "  " << setw(20) << left << node->name << ": " 
-                 << node->voteCount << " votes\n";
-            inorderTraversal(node->right);
-        }
-    }
-    
-    void collectCandidates(CandidateNode* node, vector<pair<string, int>>& candidates) {
-        if (node != nullptr) {
-            collectCandidates(node->left, candidates);
-            candidates.push_back({node->name, node->voteCount});
-            collectCandidates(node->right, candidates);
-        }
-    }
-    
-    int getTotalVotes(CandidateNode* node) {
-        if (node == nullptr) return 0;
-        return node->voteCount + getTotalVotes(node->left) + getTotalVotes(node->right);
-    }
-    
-    void destroyTree(CandidateNode* node) {
-        if (node != nullptr) {
-            destroyTree(node->left);
-            destroyTree(node->right);
-            delete node;
-        }
-    }
-    
-    void saveToFileHelper(CandidateNode* node, ofstream& file) {
-        if (node != nullptr) {
-            file << node->name << "|" << node->voteCount << "\n";
-            saveToFileHelper(node->left, file);
-            saveToFileHelper(node->right, file);
-        }
+        return nullptr;
     }
     
 public:
-    CandidateBST() : root(nullptr) {}
+    CandidateManager() : head(nullptr), candidateCount(0) {}
     
-    void addCandidate(string name) {
-        root = insert(root, name);
-        cout << "[SUCCESS] Candidate added: " << name << "\n";
+    ~CandidateManager() {
+        clear();
     }
     
-    bool addVote(string name) {
-        CandidateNode* candidate = search(root, name);
+    void clear() {
+        Candidate* current = head;
+        while (current != nullptr) {
+            Candidate* next = current->next;
+            delete current;
+            current = next;
+        }
+        head = nullptr;
+        candidateCount = 0;
+    }
+    
+    bool addCandidate(const string& name) {
+        if (!isValidName(name) || findCandidate(name) != nullptr) {
+            return false;
+        }
+        
+        Candidate* newCandidate = new Candidate(name);
+        newCandidate->next = head;
+        head = newCandidate;
+        candidateCount++;
+        return true;
+    }
+    
+    bool recordVote(const string& name) {
+        Candidate* candidate = findCandidate(name);
         if (candidate == nullptr) {
             return false;
         }
@@ -578,657 +456,427 @@ public:
         return true;
     }
     
-    void displayResults() {
+    void displayResults() const {
         cout << "\n╔════════════════════════════════════════╗\n";
-        cout << "║       ELECTION RESULTS                 ║\n";
+        cout << "║         ELECTION RESULTS              ║\n";
         cout << "╚════════════════════════════════════════╝\n";
-        inorderTraversal(root);
+        
+        Candidate* current = head;
+        int totalVotes = 0;
+        
+        // First pass: calculate total votes
+        while (current != nullptr) {
+            totalVotes += current->voteCount;
+            current = current->next;
+        }
+        
+        // Second pass: display results
+        current = head;
+        while (current != nullptr) {
+            double percentage = (totalVotes > 0) ? 
+                (current->voteCount * 100.0) / totalVotes : 0.0;
+            
+            cout << "  " << setw(20) << left << current->name 
+                 << ": " << setw(5) << current->voteCount << " votes"
+                 << " (" << fixed << setprecision(2) << setw(6) << percentage << "%)\n";
+            current = current->next;
+        }
+        
         cout << "─────────────────────────────────────────\n";
-        cout << "  Total votes cast: " << getTotalVotes(root) << "\n\n";
+        cout << "  Total Votes Cast: " << totalVotes << "\n";
+        cout << "  Total Candidates: " << candidateCount << "\n\n";
     }
     
-    string getWinner() {
-        if (root == nullptr) return "No candidates";
-        vector<pair<string, int>> allCandidates;
-        collectCandidates(root, allCandidates);
-        string winner = "";
+    string getWinner() const {
+        Candidate* current = head;
+        string winner = "No winner";
         int maxVotes = -1;
-        for (const auto& candidate : allCandidates) {
-            if (candidate.second > maxVotes) {
-                maxVotes = candidate.second;
-                winner = candidate.first;
+        
+        while (current != nullptr) {
+            if (current->voteCount > maxVotes) {
+                maxVotes = current->voteCount;
+                winner = current->name;
             }
+            current = current->next;
         }
         return winner;
     }
     
-    void getVotePercentages() {
-        if (root == nullptr) {
-            cout << "No votes cast yet.\n";
-            return;
-        }
-        vector<pair<string, int>> allCandidates;
-        collectCandidates(root, allCandidates);
-        int total = getTotalVotes(root);
-        if (total == 0) {
-            cout << "No votes cast yet.\n";
-            return;
-        }
-        
-        cout << "\n╔════════════════════════════════════════╗\n";
-        cout << "║       VOTE PERCENTAGES                 ║\n";
-        cout << "╚════════════════════════════════════════╝\n";
-        
-        for (const auto& candidate : allCandidates) {
-            double percentage = (candidate.second * 100.0) / total;
-            cout << "  " << setw(20) << left << candidate.first << ": " 
-                 << setw(5) << right << candidate.second << " votes (" 
-                 << fixed << setprecision(2) << setw(6) << percentage << "%)\n";
-        }
-        cout << "\n";
+    bool candidateExists(const string& name) const {
+        return findCandidate(name) != nullptr;
     }
     
-    void generateStatistics() {
-        if (root == nullptr) {
-            cout << "No candidates in the system.\n";
-            return;
-        }
-        vector<pair<string, int>> allCandidates;
-        collectCandidates(root, allCandidates);
-        int total = getTotalVotes(root);
-        
-        cout << "\n╔════════════════════════════════════════╗\n";
-        cout << "║       ELECTION STATISTICS              ║\n";
-        cout << "╚════════════════════════════════════════╝\n";
-        cout << "  Total Votes Cast: " << total << "\n";
-        cout << "  Number of Candidates: " << allCandidates.size() << "\n";
-        
-        if (total > 0) {
-            string winner = getWinner();
-            cout << "  Leading Candidate: " << winner << "\n";
-            int winnerVotes = 0;
-            for (const auto& candidate : allCandidates) {
-                if (candidate.first == winner) {
-                    winnerVotes = candidate.second;
-                    break;
-                }
-            }
-            double winnerPercentage = (winnerVotes * 100.0) / total;
-            cout << "  Leading Votes: " << winnerVotes << " (" 
-                 << fixed << setprecision(2) << winnerPercentage << "%)\n";
-            double avgVotes = (double)total / allCandidates.size();
-            cout << "  Average Votes/Candidate: " << fixed << setprecision(2) << avgVotes << "\n";
-            int zeroVoteCandidates = 0;
-            for (const auto& candidate : allCandidates) {
-                if (candidate.second == 0) {
-                    zeroVoteCandidates++;
-                }
-            }
-            cout << "  Candidates with Zero Votes: " << zeroVoteCandidates << "\n";
-        }
-        cout << "\n";
-    }
-    
-    bool exportResults(const string& filename) {
-        try {
-            ofstream file(filename);
-            if (!file.is_open()) {
-                throw runtime_error("Unable to open file for writing");
-            }
-            vector<pair<string, int>> allCandidates;
-            collectCandidates(root, allCandidates);
-            int total = getTotalVotes(root);
-            
-            time_t now = time(nullptr);
-            file << "╔════════════════════════════════════════╗\n";
-            file << "║    ELECTION RESULTS REPORT             ║\n";
-            file << "╚════════════════════════════════════════╝\n";
-            file << "Generated: " << ctime(&now) << "\n";
-            file << "CANDIDATE VOTES:\n";
-            file << "─────────────────────────────────────────\n";
-            for (const auto& candidate : allCandidates) {
-                double percentage = (total > 0) ? (candidate.second * 100.0) / total : 0;
-                file << candidate.first << ": " << candidate.second << " votes (" 
-                     << fixed << setprecision(2) << percentage << "%)\n";
-            }
-            file << "\nSTATISTICS:\n";
-            file << "─────────────────────────────────────────\n";
-            file << "Total Votes: " << total << "\n";
-            file << "Total Candidates: " << allCandidates.size() << "\n";
-            if (total > 0) {
-                string winner = getWinner();
-                file << "Winner: " << winner << "\n";
-            }
-            file.close();
-            cout << "[SUCCESS] Results exported to " << filename << "\n";
-            return true;
-        } catch (const exception& e) {
-            cout << "[ERROR] Error exporting results: " << e.what() << "\n";
-            return false;
-        }
-    }
-    
-    bool candidateExists(string name) {
-        return search(root, name) != nullptr;
-    }
-    
-    bool saveToFile(const string& filename) {
-        try {
-            ofstream file(filename);
-            if (!file.is_open()) {
-                throw runtime_error("Unable to open file for writing");
-            }
-            saveToFileHelper(root, file);
-            file.close();
-            return true;
-        } catch (const exception& e) {
-            cout << "[ERROR] Error saving candidates: " << e.what() << "\n";
-            return false;
-        }
-    }
-    
-    bool loadFromFile(const string& filename) {
-        try {
-            ifstream file(filename);
-            if (!file.is_open()) {
-                return false;
-            }
-            
-            string line;
-            while (getline(file, line)) {
-                stringstream ss(line);
-                string name, voteCountStr;
-                
-                getline(ss, name, '|');
-                getline(ss, voteCountStr, '|');
-                
-                if (!name.empty()) {
-                    root = insert(root, name);
-                    CandidateNode* node = search(root, name);
-                    if (node != nullptr) {
-                        node->voteCount = stoi(voteCountStr);
-                    }
-                }
-            }
-            file.close();
-            return true;
-        } catch (const exception& e) {
-            cout << "[ERROR] Error loading candidates: " << e.what() << "\n";
-            return false;
-        }
-    }
-    
-    ~CandidateBST() {
-        destroyTree(root);
-    }
+    int getCandidateCount() const { return candidateCount; }
 };
 
-class VotingSystem {
+// ==================== VOTING SYSTEM CORE ====================
+
+class SecureVotingSystem {
 private:
     VoterHashTable voterDB;
-    VoteLedger ledger;
-    CandidateBST candidates;
-    bool isAdminMode;
+    AnonymousVoteChain voteChain;
+    CandidateManager candidates;
     
-    void printHeader(const string& title) {
-        cout << "\n";
-        cout << "╔════════════════════════════════════════╗\n";
+    // Admin password (hashed)
+    string adminPasswordHash;
+    
+    // Election state
+    bool electionActive;
+    time_t electionStartTime;
+    time_t electionEndTime;
+    
+    bool verifyAdminPassword(const string& password) const {
+        string inputHash = generateSecureHash(password);
+        return inputHash == adminPasswordHash;
+    }
+    
+    // Helper function for printing headers (const version)
+    void printHeader(const string& title) const {
+        cout << "\n╔════════════════════════════════════════╗\n";
         cout << "║  " << setw(38) << left << title << "║\n";
         cout << "╚════════════════════════════════════════╝\n";
     }
     
 public:
-    VotingSystem() : isAdminMode(false) {}
-    
-    void initializeCandidates() {
-        candidates.addCandidate("Akram");
-        candidates.addCandidate("Kashan");
-        candidates.addCandidate("Mubashir");
-        candidates.addCandidate("Suleman");
+    SecureVotingSystem() : electionActive(false) {
+        // Set default admin password (should be changed in real system)
+        adminPasswordHash = generateSecureHash("Admin@123");
+        electionStartTime = electionEndTime = 0;
     }
     
-    void registerVoter(string voterID, string name) {
-        voterDB.insertVoter(voterID, name);
-    }
-    
-    void castVote(string voterID, string candidate) {
-        try {
-            if (voterID.empty()) {
-                throw invalid_argument("Voter ID cannot be empty");
-            }
-            if (candidate.empty()) {
-                throw invalid_argument("Candidate name cannot be empty");
-            }
-            
-            // Step 1: Authenticate voter using hash table
-            if (!voterDB.authenticateVoter(voterID)) {
-                throw runtime_error("Voter authentication failed!");
-            }
-            
-            Voter* voter = voterDB.findVoter(voterID);
-            if (voter == nullptr) {
-                throw runtime_error("Voter ID not found! Please register first.");
-            }
-            if (voter->hasVoted) {
-                throw runtime_error("This voter has already cast their vote!");
-            }
-            if (!candidates.candidateExists(candidate)) {
-                throw invalid_argument("Invalid candidate name!");
-            }
-            
-            if (!voterDB.markAsVoted(voterID)) {
-                throw runtime_error("Failed to mark voter as voted");
-            }
-            
-            ledger.addVote(voterID, candidate);
-            
-            if (!candidates.addVote(candidate)) {
-                throw runtime_error("Failed to record vote for candidate");
-            }
-            
-            cout << "[SUCCESS] Vote successfully cast for " << candidate << "!\n";
-        } catch (const invalid_argument& e) {
-            cout << "[ERROR] Invalid input: " << e.what() << "\n";
-        } catch (const runtime_error& e) {
-            cout << "[ERROR] " << e.what() << "\n";
-        } catch (const exception& e) {
-            cout << "[ERROR] Unexpected error casting vote: " << e.what() << "\n";
+    void initializeElection(const vector<string>& candidateNames, 
+                           int durationHours = 24) {
+        if (electionActive) {
+            cout << "[ERROR] Election is already active!\n";
+            return;
         }
-    }
-    
-    void displayResults() {
-        candidates.displayResults();
-    }
-    
-    void displayLedger() {
-        ledger.displayLedger();
-    }
-    
-    void displayVoters() {
-        voterDB.displayAllVoters();
-    }
-    
-    void showPercentages() {
-        candidates.getVotePercentages();
-    }
-    
-    void showStatistics() {
-        candidates.generateStatistics();
-    }
-    
-    void exportElectionResults(const string& filename) {
-        candidates.exportResults(filename);
-    }
-    
-    bool saveSystemState(const string& baseFilename) {
-        try {
-            printHeader("SAVING SYSTEM STATE");
-            bool success = true;
-            
-            cout << "  Saving voters database...";
-            success &= voterDB.saveToFile(baseFilename + "_voters.txt");
-            cout << " [DONE]\n";
-            
-            cout << "  Saving blockchain ledger...";
-            success &= ledger.saveToFile(baseFilename + "_ledger.txt");
-            cout << " [DONE]\n";
-            
-            cout << "  Saving candidates data...";
-            success &= candidates.saveToFile(baseFilename + "_candidates.txt");
-            cout << " [DONE]\n";
-            
-            if (success) {
-                cout << "\n[SUCCESS] System state saved successfully!\n\n";
-            } else {
-                cout << "\n[WARNING] Some files may not have been saved properly\n\n";
+        
+        printHeader("INITIALIZING ELECTION");
+        
+        // Clear previous data
+        voteChain.clear();
+        candidates.clear();
+        
+        // Add candidates
+        for (const string& name : candidateNames) {
+            if (candidates.addCandidate(name)) {
+                cout << "  Added candidate: " << name << "\n";
             }
-            return success;
-        } catch (const exception& e) {
-            cout << "❌ Error saving system state: " << e.what() << "\n";
+        }
+        
+        // Set election timeframe
+        electionStartTime = time(nullptr);
+        electionEndTime = electionStartTime + (durationHours * 3600);
+        electionActive = true;
+        
+        cout << "\n[SUCCESS] Election initialized!\n";
+        cout << "  Start: " << ctime(&electionStartTime);
+        cout << "  End:   " << ctime(&electionEndTime);
+        cout << "  Duration: " << durationHours << " hours\n\n";
+    }
+    
+    bool registerVoter(const string& voterID, const string& name, const string& pin) {
+        if (!electionActive) {
+            cout << "[ERROR] No active election\n";
             return false;
         }
-    }
-    
-    bool loadSystemState(const string& baseFilename) {
-        try {
-            printHeader("LOADING SYSTEM STATE");
-            
-            cout << "  Loading voters database...";
-            bool votersLoaded = voterDB.loadFromFile(baseFilename + "_voters.txt");
-            cout << (votersLoaded ? " [DONE]\n" : " [NOT FOUND]\n");
-            
-            cout << "  Loading blockchain ledger...";
-            bool ledgerLoaded = ledger.loadFromFile(baseFilename + "_ledger.txt");
-            cout << (ledgerLoaded ? " [DONE]\n" : " [NOT FOUND]\n");
-            
-            cout << "  Loading candidates data...";
-            bool candidatesLoaded = candidates.loadFromFile(baseFilename + "_candidates.txt");
-            cout << (candidatesLoaded ? " [DONE]\n" : " [NOT FOUND]\n");
-            
-            if (votersLoaded || ledgerLoaded || candidatesLoaded) {
-                cout << "\n[SUCCESS] System state loaded successfully!\n\n";
-                return true;
-            }
-            return false;
-        } catch (const exception& e) {
-            cout << "❌ Error loading system state: " << e.what() << "\n";
-            return false;
-        }
-    }
-    
-    bool exportReport(const string& filename) {
-        try {
-            ofstream file(filename);
-            if (!file.is_open()) {
-                throw runtime_error("Unable to open file for writing");
-            }
-            
-            time_t now = time(nullptr);
-            file << "╔════════════════════════════════════════╗\n";
-            file << "║  COMPREHENSIVE ELECTION REPORT         ║\n";
-            file << "╚════════════════════════════════════════╝\n";
-            file << "Generated: " << ctime(&now) << "\n";
-            
-            file << "\n--- SYSTEM STATISTICS ---\n";
-            file << "Total Registered Voters: " << voterDB.getTotalVoters() << "\n";
-            file << "Votes Cast: " << voterDB.getVotedCount() << "\n";
-            file << "Turnout Rate: " << fixed << setprecision(2) 
-                 << (double)voterDB.getVotedCount() / voterDB.getTotalVoters() * 100 << "%\n";
-            
-            file << "\n--- BLOCKCHAIN STATUS ---\n";
-            if (ledger.verifyChain()) {
-                file << "Blockchain Integrity: [VERIFIED]\n";
-            } else {
-                file << "Blockchain Integrity: [COMPROMISED]\n";
-            }
-            file << "Total Blockchain Records: " << ledger.getTotalVotes() << "\n";
-            
-            file.close();
-            cout << "[SUCCESS] Comprehensive report exported to " << filename << "\n";
+        
+        if (voterDB.registerVoter(voterID, name, pin)) {
+            cout << "[SUCCESS] Voter registered: " << name << " (ID: " << voterID << ")\n";
             return true;
-        } catch (const exception& e) {
-            cout << "[ERROR] Error exporting report: " << e.what() << "\n";
+        }
+        cout << "[ERROR] Registration failed. Check ID/name format or duplicate ID.\n";
+        return false;
+    }
+    
+    bool castVote(const string& voterID, const string& pin, const string& candidate) {
+        if (!electionActive) {
+            cout << "[ERROR] No active election\n";
             return false;
         }
+        
+        time_t now = time(nullptr);
+        if (now > electionEndTime) {
+            cout << "[ERROR] Election has ended\n";
+            electionActive = false;
+            return false;
+        }
+        
+        // Authenticate voter
+        if (!voterDB.authenticateVoter(voterID, pin)) {
+            cout << "[ERROR] Authentication failed. Check ID/PIN or if already voted.\n";
+            return false;
+        }
+        
+        // Verify candidate exists
+        if (!candidates.candidateExists(candidate)) {
+            cout << "[ERROR] Invalid candidate\n";
+            return false;
+        }
+        
+        // Record vote in voter database
+        if (!voterDB.castVote(voterID)) {
+            cout << "[ERROR] Failed to record vote\n";
+            return false;
+        }
+        
+        // Add anonymous vote to chain
+        if (!voteChain.addVote(candidate)) {
+            cout << "[ERROR] Failed to add vote to secure chain\n";
+            return false;
+        }
+        
+        // Update candidate vote count
+        candidates.recordVote(candidate);
+        
+        cout << "[SUCCESS] Vote cast for " << candidate << "!\n";
+        cout << "          Your vote is recorded anonymously.\n";
+        return true;
     }
     
-    void auditBlockchain() {
-        printHeader("BLOCKCHAIN AUDIT");
-        ledger.displayBlockchainHealth();
-    }
-    
-    void detectTampering() {
-        printHeader("TAMPERING DETECTION");
-        if (ledger.verifyChain()) {
-            cout << "  [OK] No tampering detected\n";
-            cout << "  [SECURE] System integrity maintained\n\n";
-        } else {
-            cout << "  [ALERT] Potential tampering detected!\n";
-            cout << "  [WARNING] Please review the blockchain immediately\n\n";
+    void displayCurrentResults() const {
+        if (!electionActive) {
+            cout << "[INFO] No active election\n";
+            return;
+        }
+        
+        printHeader("CURRENT ELECTION RESULTS");
+        candidates.displayResults();
+        
+        // Show election time remaining
+        time_t now = time(nullptr);
+        if (now < electionEndTime) {
+            int remaining = (electionEndTime - now) / 60; // minutes
+            cout << "  Time remaining: " << remaining << " minutes\n";
         }
     }
     
-    void showHashTableStats() {
-        voterDB.displayHashTableStatistics();
-    }
-    
-    void adminDashboard() {
-        printHeader("ADMIN DASHBOARD");
-        cout << "  [STATS] System Overview:\n";
-        cout << "  |-- Total Voters: " << voterDB.getTotalVoters() << "\n";
-        cout << "  |-- Voted: " << voterDB.getVotedCount() << "\n";
-        cout << "  |-- Pending: " << voterDB.getTotalVoters() - voterDB.getVotedCount() << "\n";
-        cout << "  |-- Turnout: " << fixed << setprecision(2) 
-             << (double)voterDB.getVotedCount() / max(1, voterDB.getTotalVoters()) * 100 << "%\n";
-        cout << "  |-- Blockchain Blocks: " << ledger.getTotalVotes() << "\n\n";
-        
-        cout << "  [SECURITY] Security Status:\n";
-        cout << "  |-- Encryption: [ENABLED]\n";
-        cout << "  |-- Hash Table: [ACTIVE]\n";
-        cout << "  |-- Blockchain: " << (ledger.verifyChain() ? "[VERIFIED]" : "[INVALID]") << "\n\n";
-    }
-    
-    void fullSystemAudit() {
-        printHeader("FULL SYSTEM AUDIT");
-        
-        cout << "\n[1] Hash Table Analysis:\n";
-        voterDB.displayHashTableStatistics();
-        
-        cout << "\n[2] Blockchain Verification:\n";
-        ledger.displayBlockchainHealth();
-        
-        cout << "\n[3] Election Statistics:\n";
-        candidates.generateStatistics();
-        
-        cout << "\n[4] Data Integrity Check:\n";
-        if (voterDB.getTotalVoters() > 0) {
-            cout << "  [OK] Voter database: OK\n";
-        } else {
-            cout << "  [WARNING] Voter database: Empty\n";
+    void endElection(const string& adminPassword) {
+        if (!verifyAdminPassword(adminPassword)) {
+            cout << "[ERROR] Admin authentication failed!\n";
+            return;
         }
         
-        if (ledger.getTotalVotes() == voterDB.getVotedCount()) {
-            cout << "  [OK] Vote ledger matches voter records\n";
-        } else {
-            cout << "  [WARNING] Mismatch between ledger and voter records\n";
-            cout << "            Ledger: " << ledger.getTotalVotes() << " | Voters: " 
-                 << voterDB.getVotedCount() << "\n";
+        if (!electionActive) {
+            cout << "[INFO] No active election to end\n";
+            return;
         }
-        cout << "\n";
+        
+        electionActive = false;
+        printHeader("ELECTION FINALIZED");
+        
+        // Final results
+        candidates.displayResults();
+        
+        // Chain verification
+        voteChain.displayChainHealth();
+        
+        // Statistics
+        cout << "  Total Registered Voters: " << voterDB.getTotalVoters() << "\n";
+        cout << "  Total Votes Cast: " << voterDB.getVotedCount() << "\n";
+        cout << "  Winner: " << candidates.getWinner() << "\n";
+        
+        // Verify no tampering
+        if (!voteChain.verifyChain()) {
+            cout << "\n[WARNING] Vote chain integrity check failed!\n";
+            cout << "          Election results may be compromised.\n";
+        }
+    }
+    
+    void auditSystem(const string& adminPassword) {
+        if (!verifyAdminPassword(adminPassword)) {
+            cout << "[ERROR] Admin authentication failed!\n";
+            return;
+        }
+        
+        printHeader("SYSTEM AUDIT REPORT");
+        
+        cout << "\n[1] VOTER DATABASE:\n";
+        voterDB.displayStatistics();
+        
+        cout << "\n[2] VOTE CHAIN INTEGRITY:\n";
+        voteChain.displayChainHealth();
+        
+        cout << "\n[3] ELECTION STATUS:\n";
+        if (electionActive) {
+            time_t now = time(nullptr);
+            cout << "  Status: [ACTIVE]\n";
+            cout << "  Time elapsed: " << (now - electionStartTime) / 60 << " minutes\n";
+            cout << "  Time remaining: " << (electionEndTime - now) / 60 << " minutes\n";
+        } else {
+            cout << "  Status: [INACTIVE]\n";
+        }
+        
+        cout << "\n[4] DATA CONSISTENCY CHECK:\n";
+        int dbVotes = voterDB.getVotedCount();
+        int chainVotes = voteChain.getTotalVotes();
+        
+        if (dbVotes == chainVotes) {
+            cout << "  [PASS] Voter database matches vote chain: " << dbVotes << " votes\n";
+        } else {
+            cout << "  [FAIL] Mismatch detected!\n";
+            cout << "         Database: " << dbVotes << " votes\n";
+            cout << "         Chain: " << chainVotes << " votes\n";
+        }
+    }
+    
+    bool isElectionActive() const { return electionActive; }
+    
+    void changeAdminPassword(const string& oldPass, const string& newPass) {
+        if (!verifyAdminPassword(oldPass)) {
+            cout << "[ERROR] Current password incorrect\n";
+            return;
+        }
+        
+        if (newPass.length() < 6) {
+            cout << "[ERROR] New password must be at least 6 characters\n";
+            return;
+        }
+        
+        adminPasswordHash = generateSecureHash(newPass);
+        cout << "[SUCCESS] Admin password changed\n";
     }
 };
 
-void displayBanner() {
-    cout << "\n╔════════════════════════════════════════════════╗\n";
-    cout << "║                                                ║\n";
-    cout << "║         SECURE E-VOTING SYSTEM                 ║\n";
-    cout << "║                                                ║\n";
-    cout << "║   Blockchain-Powered | Hash-Table Auth         ║\n";
-    cout << "║   Encrypted Storage | Tamper-Proof             ║\n";
-    cout << "║                                                ║\n";
-    cout << "╚════════════════════════════════════════════════╝\n";
-}
+// ==================== USER INTERFACE ====================
 
-void displayMenu() {
+void displayMainMenu() {
     cout << "\n┌────────────────────────────────────────┐\n";
-    cout << "│          MAIN MENU                     │\n";
+    cout << "│     SECURE VOTING SYSTEM v2.0        │\n";
     cout << "├────────────────────────────────────────┤\n";
-    cout << "│ VOTER OPERATIONS:                      │\n";
-    cout << "│  1. Register Voter                     │\n";
-    cout << "│  2. Cast Vote                          │\n";
-    cout << "│  3. Display Election Results           │\n";
-    cout << "│  4. View Registered Voters             │\n";
-    cout << "│  5. Show Vote Percentages              │\n";
+    cout << "│ 1. Register Voter                      │\n";
+    cout << "│ 2. Cast Vote                           │\n";
+    cout << "│ 3. View Current Results                │\n";
     cout << "│                                        │\n";
-    cout << "│ BLOCKCHAIN & SECURITY:                 │\n";
-    cout << "│  6. View Blockchain Ledger             │\n";
-    cout << "│  7. Audit Blockchain                   │\n";
-    cout << "│  8. Detect Tampering                   │\n";
+    cout << "│ 4. Admin: Initialize Election          │\n";
+    cout << "│ 5. Admin: End Election                 │\n";
+    cout << "│ 6. Admin: Audit System                 │\n";
+    cout << "│ 7. Admin: Change Password              │\n";
     cout << "│                                        │\n";
-    cout << "│ ADMIN TOOLS:                           │\n";
-    cout << "│  9. Show Statistics                    │\n";
-    cout << "│ 10. Hash Table Statistics              │\n";
-    cout << "│ 11. Admin Dashboard                    │\n";
-    cout << "│ 12. Full System Audit                  │\n";
-    cout << "│                                        │\n";
-    cout << "│ FILE OPERATIONS:                       │\n";
-    cout << "│ 13. Save System State                  │\n";
-    cout << "│ 14. Load System State                  │\n";
-    cout << "│ 15. Export Results to File             │\n";
-    cout << "│ 16. Export Comprehensive Report        │\n";
-    cout << "│                                        │\n";
-    cout << "│  0. Exit                               │\n";
+    cout << "│ 0. Exit                                │\n";
     cout << "└────────────────────────────────────────┘\n";
-    cout << "Choose an option: ";
-}
-
-void waitForUser() {
-    cout << "\nPress Enter to return to main menu...";
-    cin.ignore(10000, '\n');
+    cout << "Select: ";
 }
 
 int main() {
-    try {
-        displayBanner();
-        VotingSystem system;
+    srand(static_cast<unsigned int>(time(nullptr)));
+    
+    cout << "\n╔════════════════════════════════════════╗\n";
+    cout << "║     SECURE VOTING SYSTEM v2.0         ║\n";
+    cout << "║     (Student Project - Educational)    ║\n";
+    cout << "╚════════════════════════════════════════╝\n";
+    
+    SecureVotingSystem votingSystem;
+    
+    // Sample initialization
+    vector<string> defaultCandidates = {"Alice", "Bob", "Charlie", "Diana"};
+    
+    cout << "\n[INFO] System ready. No election active.\n";
+    cout << "[INFO] Default candidates available: ";
+    for (const auto& c : defaultCandidates) cout << c << " ";
+    cout << "\n\n";
+    
+    int choice;
+    string voterID, name, pin, candidate, adminPass, newPass;
+    
+    while (true) {
+        displayMainMenu();
         
-        cout << "\n[INIT] Initializing E-Voting System...\n";
-        
-        if (!system.loadSystemState("voting_data")) {
-            cout << "[INFO] No previous data found. Starting fresh.\n\n";
-            system.initializeCandidates();
-            
-            cout << "[SETUP] Registering default voters...\n";
-            system.registerVoter("V001", "Abbad");
-            system.registerVoter("V002", "Talal");
-            system.registerVoter("V003", "Haziq");
-            cout << "\n";
+        if (!(cin >> choice)) {
+            cin.clear();
+            cin.ignore(10000, '\n');
+            cout << "[ERROR] Invalid input\n";
+            continue;
         }
+        cin.ignore(); // Clear newline
         
-        int choice;
-        string voterID, name, candidate, filename;
-        
-        while (true) {
-            try {
-                displayMenu();
-                
-                if (!(cin >> choice)) {
-                    cin.clear();
-                    cin.ignore(10000, '\n');
-                    throw invalid_argument("Invalid input! Please enter a number.");
-                }
-                cin.ignore();
-                
-                switch (choice) {
-                    case 1:
-                        cout << "\n[REGISTER] VOTER REGISTRATION\n";
-                        cout << "Enter Voter ID: ";
-                        getline(cin, voterID);
-                        cout << "Enter Name: ";
-                        getline(cin, name);
-                        system.registerVoter(voterID, name);
-                        waitForUser();
+        try {
+            switch (choice) {
+                case 1: // Register Voter
+                    if (!votingSystem.isElectionActive()) {
+                        cout << "[ERROR] No active election for registration\n";
                         break;
-                        
-                    case 2:
-                        cout << "\n[VOTE] CAST VOTE\n";
-                        cout << "Enter Voter ID: ";
-                        getline(cin, voterID);
-                        cout << "\nAvailable Candidates:\n";
-                        cout << "  - Akram\n";
-                        cout << "  - Kashan\n";
-                        cout << "  - Mubashir\n";
-                        cout << "  - Suleman\n";
-                        cout << "\nEnter Candidate Name: ";
-                        getline(cin, candidate);
-                        system.castVote(voterID, candidate);
-                        waitForUser();
+                    }
+                    cout << "\n[VOTER REGISTRATION]\n";
+                    cout << "Enter Voter ID (alphanumeric, 3-20 chars): ";
+                    getline(cin, voterID);
+                    cout << "Enter Full Name: ";
+                    getline(cin, name);
+                    cout << "Enter 4-digit PIN: ";
+                    getline(cin, pin);
+                    
+                    votingSystem.registerVoter(voterID, name, pin);
+                    break;
+                    
+                case 2: // Cast Vote
+                    if (!votingSystem.isElectionActive()) {
+                        cout << "[ERROR] No active election\n";
                         break;
-                        
-                    case 3:
-                        system.displayResults();
-                        waitForUser();
-                        break;
-                        
-                    case 4:
-                        system.displayVoters();
-                        waitForUser();
-                        break;
-                        
-                    case 5:
-                        system.showPercentages();
-                        waitForUser();
-                        break;
-                        
-                    case 6:
-                        system.displayLedger();
-                        waitForUser();
-                        break;
-                        
-                    case 7:
-                        system.auditBlockchain();
-                        waitForUser();
-                        break;
-                        
-                    case 8:
-                        system.detectTampering();
-                        waitForUser();
-                        break;
-                        
-                    case 9:
-                        system.showStatistics();
-                        waitForUser();
-                        break;
-                        
-                    case 10:
-                        system.showHashTableStats();
-                        waitForUser();
-                        break;
-                        
-                    case 11:
-                        system.adminDashboard();
-                        waitForUser();
-                        break;
-                        
-                    case 12:
-                        system.fullSystemAudit();
-                        waitForUser();
-                        break;
-                        
-                    case 13:
-                        system.saveSystemState("voting_data");
-                        waitForUser();
-                        break;
-                        
-                    case 14:
-                        if (system.loadSystemState("voting_data")) {
-                            cout << "[SUCCESS] System state loaded successfully!\n";
-                        } else {
-                            cout << "[ERROR] No saved data found or error loading.\n";
-                        }
-                        waitForUser();
-                        break;
-                        
-                    case 15:
-                        cout << "Enter filename (e.g., results.txt): ";
-                        getline(cin, filename);
-                        system.exportElectionResults(filename);
-                        waitForUser();
-                        break;
-                        
-                    case 16:
-                        cout << "Enter filename (e.g., report.txt): ";
-                        getline(cin, filename);
-                        system.exportReport(filename);
-                        waitForUser();
-                        break;
-                        
-                    case 0:
-                        cout << "\n[SAVE] Saving system state before exit...\n";
-                        system.saveSystemState("voting_data");
-                        cout << "\n[EXIT] Thank you for using Secure E-Voting System!\n";
-                        cout << "[INFO] All data encrypted and saved securely.\n\n";
-                        return 0;
-                        
-                    default:
-                        cout << "[ERROR] Invalid choice! Please try again.\n";
-                        waitForUser();
-                }
-            } catch (const invalid_argument& e) {
-                cout << "[ERROR] Input error: " << e.what() << "\n";
-            } catch (const runtime_error& e) {
-                cout << "[ERROR] Runtime error: " << e.what() << "\n";
-            } catch (const exception& e) {
-                cout << "[ERROR] " << e.what() << "\n";
+                    }
+                    cout << "\n[CAST VOTE]\n";
+                    cout << "Enter Voter ID: ";
+                    getline(cin, voterID);
+                    cout << "Enter PIN: ";
+                    getline(cin, pin);
+                    cout << "Available candidates: Alice, Bob, Charlie, Diana\n";
+                    cout << "Enter Candidate Name: ";
+                    getline(cin, candidate);
+                    
+                    votingSystem.castVote(voterID, pin, candidate);
+                    break;
+                    
+                case 3: // View Results
+                    votingSystem.displayCurrentResults();
+                    break;
+                    
+                case 4: // Initialize Election
+                    cout << "\n[INITIALIZE ELECTION - ADMIN]\n";
+                    cout << "Enter admin password: ";
+                    getline(cin, adminPass);
+                    
+                    // In real system, get candidates from admin
+                    cout << "Initializing election with default candidates...\n";
+                    votingSystem.initializeElection(defaultCandidates, 2); // 2 hour election
+                    break;
+                    
+                case 5: // End Election
+                    cout << "\n[END ELECTION - ADMIN]\n";
+                    cout << "Enter admin password: ";
+                    getline(cin, adminPass);
+                    votingSystem.endElection(adminPass);
+                    break;
+                    
+                case 6: // Audit System
+                    cout << "\n[SYSTEM AUDIT - ADMIN]\n";
+                    cout << "Enter admin password: ";
+                    getline(cin, adminPass);
+                    votingSystem.auditSystem(adminPass);
+                    break;
+                    
+                case 7: // Change Admin Password
+                    cout << "\n[CHANGE ADMIN PASSWORD]\n";
+                    cout << "Enter current password: ";
+                    getline(cin, adminPass);
+                    cout << "Enter new password (min 6 chars): ";
+                    getline(cin, newPass);
+                    votingSystem.changeAdminPassword(adminPass, newPass);
+                    break;
+                    
+                case 0: // Exit
+                    cout << "\n[EXIT] Thank you for using Secure Voting System!\n";
+                    return 0;
+                    
+                default:
+                    cout << "[ERROR] Invalid choice\n";
             }
+            
+            cout << "\nPress Enter to continue...";
+            cin.ignore(10000, '\n');
+            
+        } catch (const exception& e) {
+            cout << "[ERROR] " << e.what() << "\n";
         }
-    } catch (const exception& e) {
-        cout << "[CRITICAL] Critical error: " << e.what() << "\n";
-        cout << "[CRITICAL] The system encountered a fatal error and must exit.\n";
-        return 1;
-    } catch (...) {
-        cout << "[CRITICAL] Unknown critical error occurred!\n";
-        return 1;
     }
+    
     return 0;
 }

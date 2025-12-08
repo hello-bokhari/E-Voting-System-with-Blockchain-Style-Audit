@@ -14,14 +14,14 @@
 using namespace std;
 using namespace std::chrono;
 
-// Simple hash function - FIXED: Proper overflow handling
+// Simple hash function
 int simpleHash(const string& key, int tableSize) {
     if (tableSize <= 0) return 0;
-    unsigned int hash = 0;  // Use unsigned to avoid negative overflow
+    unsigned int hash = 0;
     for (size_t i = 0; i < key.length(); i++) {
         hash = (hash * 31 + static_cast<unsigned int>(key[i])) % tableSize;
     }
-    return hash % tableSize;  // Always positive
+    return hash % tableSize;
 }
 
 // Generate hash for blockchain
@@ -297,7 +297,7 @@ public:
         }
     }
     
-    // FIXED: More robust file loading with validation
+    // File loading with validation
     bool loadFromFile(const string& filename) {
         try {
             ifstream file(filename.c_str());
@@ -679,7 +679,7 @@ private:
     VoterHashTable voterDB;
     VoteLedger ledger;
     CandidateBST candidates;
-    bool candidatesInitialized;  // FIXED: Track initialization
+    bool candidatesInitialized;
     
 public:
     VotingSystem() : candidatesInitialized(false) {}
@@ -843,7 +843,7 @@ void showMenu() {
     cout << "\nEnter choice: ";
 }
 
-// FIXED: Robust input handling
+// input handling
 int getMenuChoice() {
     int choice;
     while (true) {
@@ -864,10 +864,10 @@ int main() {
     
     cout << "\n[INIT] Initializing system...\n";
     
-    // FIXED: Always initialize candidates first
+    // initialize candidates
     system.initializeCandidates();
     
-    // Then try to load voter data
+    //load voter data
     if (system.loadData()) {
         cout << "[INFO] Previous voter data loaded successfully.\n";
     } else {
@@ -883,7 +883,7 @@ int main() {
     while (true) {
         try {
             showMenu();
-            int choice = getMenuChoice();  // FIXED: Robust input
+            int choice = getMenuChoice();
             
             switch (choice) {
                 case 1:

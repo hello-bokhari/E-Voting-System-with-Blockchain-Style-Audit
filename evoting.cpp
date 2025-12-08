@@ -806,7 +806,7 @@ void showBanner() {
     cout << "\n";
     cout << "+========================================+\n";
     cout << "|                                        |\n";
-    cout << "|     SECURE E-VOTING SYSTEM v3.0        |\n";
+    cout << "|     SECURE E-VOTING SYSTEM             |\n";
     cout << "|                                        |\n";
     cout << "|   Blockchain - Hash Table - BST        |\n";
     cout << "|   WITH TIME COMPLEXITY ANALYSIS        |\n";
